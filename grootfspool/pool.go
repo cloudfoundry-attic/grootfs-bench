@@ -3,7 +3,6 @@ package grootfspool
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"os/exec"
 	"sync"
 	"time"
@@ -22,20 +21,17 @@ type Pool struct {
 
 	concurrency int
 	wg          sync.WaitGroup
-	rand        *rand.Rand
 
 	startedAt time.Time
 }
 
 func New(cmdRunner command_runner.CommandRunner, grootfsBin, storePath, image string, concurrency int) *Pool {
-	seed := rand.NewSource(time.Now().UnixNano())
 
 	pool := &Pool{
 		cmdRunner:   cmdRunner,
 		grootfsBin:  grootfsBin,
 		storePath:   storePath,
 		image:       image,
-		rand:        rand.New(seed),
 		concurrency: concurrency,
 	}
 	pool.wg.Add(concurrency)
@@ -82,7 +78,7 @@ func (p *Pool) worker(workerId int, jobs <-chan int, results chan time.Duration,
 			p.storePath,
 			"create",
 			p.image,
-			fmt.Sprintf("image-%d-%d-%d", workerId, i, p.rand.Int()))
+			fmt.Sprintf("image-%d-%d-%d", workerId, i, time.Now().UnixNano()))
 
 		cmd.Stderr = outputBuffer
 		cmd.Stdout = outputBuffer
