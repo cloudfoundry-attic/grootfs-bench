@@ -1,6 +1,6 @@
 # GROOTFS BENCH
 
-Benchmarking tool for (groofs)[https://github.com/cloudfoundry/grootfs]
+Benchmarking tool for [grootfs](https://github.com/cloudfoundry/grootfs)
 
 ## Usage
 
