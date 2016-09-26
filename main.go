@@ -8,8 +8,8 @@ import (
 
 	"code.cloudfoundry.org/grootfs-bench/grootfspool"
 
+	"code.cloudfoundry.org/commandrunner/linux_command_runner"
 	"github.com/briandowns/spinner"
-	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/urfave/cli"
 )
 

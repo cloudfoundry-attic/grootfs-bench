@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudfoundry/gunk/command_runner"
+	"code.cloudfoundry.org/commandrunner"
 )
 
 type Pool struct {
-	cmdRunner  command_runner.CommandRunner
+	cmdRunner  commandrunner.CommandRunner
 	grootfsBin string
 	storePath  string
 	image      string
@@ -25,7 +25,7 @@ type Pool struct {
 	startedAt time.Time
 }
 
-func New(cmdRunner command_runner.CommandRunner, grootfsBin, storePath, image string, concurrency int) *Pool {
+func New(cmdRunner commandrunner.CommandRunner, grootfsBin, storePath, image string, concurrency int) *Pool {
 
 	pool := &Pool{
 		cmdRunner:   cmdRunner,
