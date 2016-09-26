@@ -3,7 +3,10 @@
 export GOPATH=$PWD:$GOPATH
 
 cd src/code.cloudfoundry.org/grootfs-bench
+if ! [ -d vendor ]; then
+  glide install
+fi
 
-grootsay I AM BENCH
-go get -t ./...
-ginkgo -r
+echo "I AM BENCH" | grootsay
+
+ginkgo -r -p -race
