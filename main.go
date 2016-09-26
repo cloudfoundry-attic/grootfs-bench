@@ -9,7 +9,7 @@ import (
 	"code.cloudfoundry.org/grootfs-bench/grootfspool"
 
 	"code.cloudfoundry.org/commandrunner/linux_command_runner"
-	"github.com/briandowns/spinner"
+	spinnerpkg "github.com/briandowns/spinner"
 	"github.com/urfave/cli"
 )
 
@@ -46,20 +46,29 @@ func main() {
 			Usage: "image to use",
 			Value: "docker:///busybox:latest",
 		},
+		cli.BoolFlag{
+			Name:  "nospin",
+			Usage: "turn off the awesome spinner, you monster",
+		},
 	}
 
 	bench.Action = func(ctx *cli.Context) error {
-		style := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % 36
-		s := spinner.New(spinner.CharSets[style], 100*time.Millisecond)
-		s.Prefix = "Doing crazy maths "
-		s.Color("green")
-		s.Start()
-
 		storePath := ctx.String("store")
 		image := ctx.String("image")
 		grootfs := ctx.String("gbin")
 		totalBundles := ctx.Int("bundles")
 		concurrency := ctx.Int("concurrency")
+		nospin := ctx.Bool("nospin")
+		hasSpinner := !nospin
+
+		var spinner *spinnerpkg.Spinner
+		if hasSpinner {
+			style := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % 36
+			spinner = spinnerpkg.New(spinnerpkg.CharSets[style], 100*time.Millisecond)
+			spinner.Prefix = "Doing crazy maths "
+			spinner.Color("green")
+			spinner.Start()
+		}
 
 		cmdRunner := linux_command_runner.New()
 		pool := grootfspool.New(cmdRunner, grootfs, storePath, image, concurrency)
@@ -87,7 +96,10 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Failures: %s\n", err.Error())
 		}
 
-		s.Stop()
+		if hasSpinner {
+			spinner.Stop()
+		}
+
 		fmt.Printf("\r........................                     \n")
 		fmt.Printf("Total duration.........: %s\n", totalDuration.String())
 		fmt.Printf("Bundles per second.....: %f\n", float64(createdBundles)/totalDuration.Seconds())
