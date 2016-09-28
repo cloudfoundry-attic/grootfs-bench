@@ -26,7 +26,6 @@ type Pool struct {
 }
 
 func New(cmdRunner commandrunner.CommandRunner, grootfsBin, storePath, image string, concurrency int) *Pool {
-
 	pool := &Pool{
 		cmdRunner:   cmdRunner,
 		grootfsBin:  grootfsBin,
