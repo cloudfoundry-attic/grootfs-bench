@@ -42,8 +42,9 @@ func TestIntegration(t *testing.T) {
 	})
 
 	SynchronizedAfterSuite(func() {
+	}, func() {
 		gexec.CleanupBuildArtifacts()
-	}, func() {})
+	})
 
 	RunSpecs(t, "Integration Suite")
 }

@@ -1,15 +1,12 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"math/rand"
 	"os"
 	"time"
 
-	"code.cloudfoundry.org/grootfs-bench/grootfspool"
-
 	"code.cloudfoundry.org/commandrunner/linux_command_runner"
+	benchpkg "code.cloudfoundry.org/grootfs-bench/bench"
 	spinnerpkg "github.com/briandowns/spinner"
 	"github.com/urfave/cli"
 )
@@ -74,83 +71,27 @@ func main() {
 			spinner.Prefix = "Doing crazy maths "
 			spinner.Color("green")
 			spinner.Start()
+			defer spinner.Stop()
+		}
+
+		var printer benchpkg.Printer
+		printer = benchpkg.TextPrinter([]byte{})
+		if jsonify {
+			printer = benchpkg.JsonPrinter([]byte{})
 		}
 
 		cmdRunner := linux_command_runner.New()
-		pool := grootfspool.New(cmdRunner, grootfs, storePath, image, concurrency)
-
-		if hasSpinner {
-			spinner.Stop()
-		}
-
-		res := run(totalBundlesAmt, concurrency, pool)
-
-		if jsonify {
-			j, err := json.Marshal(res)
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(j))
-			return nil
-		}
-
-		fmt.Printf("Total bundles requested: %d\n", res.BundlesRequested)
-		fmt.Printf("Concurrency factor.....: %d\n", res.ConcurrencyFactor)
-		fmt.Printf("\r........................                     \n")
-		fmt.Printf("Total duration.........: %s\n", res.TotalDuration.String())
-		fmt.Printf("Bundles per second.....: %f\n", res.BundlesPerSecond)
-		fmt.Printf("Average time per bundle: %f\n", res.AverageTimePerBundle)
-		fmt.Printf("Total errors...........: %d\n", res.TotalErrorsAmt)
-		fmt.Printf("Error Rate.............: %f\n", res.ErrorRate)
+		(&benchpkg.Job{
+			Runner:         cmdRunner,
+			GrootFSBinPath: grootfs,
+			StorePath:      storePath,
+			Image:          image,
+			Concurrency:    concurrency,
+			TotalBundles:   totalBundlesAmt,
+		}).Run(printer)
 
 		return nil
 	}
 
 	bench.Run(os.Args)
-}
-
-func run(totalBundlesAmt int, concurrency int, pool *grootfspool.Pool) result {
-	bundlesChan := pool.Start(totalBundlesAmt)
-
-	start := time.Now()
-	for bundle := 1; bundle <= totalBundlesAmt; bundle++ {
-		bundlesChan <- bundle
-	}
-	close(bundlesChan)
-	pool.Wait()
-	totalDuration := time.Since(start)
-
-	createdBundles := 0
-	averageTimePerBundle := 0.0
-	for result := range pool.DurationChan() {
-		createdBundles++
-		averageTimePerBundle += result.Seconds()
-	}
-	averageTimePerBundle = averageTimePerBundle / float64(createdBundles)
-
-	totalErrorsAmt := 0
-	for err := range pool.ErrorsChan() {
-		totalErrorsAmt++
-		fmt.Fprintf(os.Stderr, "Failures: %s\n", err.Error())
-	}
-
-	return result{
-		TotalDuration:        totalDuration,
-		BundlesPerSecond:     float64(createdBundles) / totalDuration.Seconds(),
-		AverageTimePerBundle: averageTimePerBundle,
-		TotalErrorsAmt:       totalErrorsAmt,
-		ErrorRate:            float64(totalErrorsAmt*100) / float64(totalBundlesAmt),
-		BundlesRequested:     totalBundlesAmt,
-		ConcurrencyFactor:    concurrency,
-	}
-}
-
-type result struct {
-	TotalDuration        time.Duration `json:"total_duration"`
-	BundlesPerSecond     float64       `json:"bundles_per_second"`
-	AverageTimePerBundle float64       `json:"average_time_per_bundle"`
-	TotalErrorsAmt       int           `json:"total_errors_amt"`
-	ErrorRate            float64       `json:"error_rate"`
-	BundlesRequested     int           `json:"bundles_requested"`
-	ConcurrencyFactor    int           `json:"concurrency_factor"`
 }

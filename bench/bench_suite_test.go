@@ -1,4 +1,4 @@
-package grootfspool_test
+package bench_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestGrootfspool(t *testing.T) {
+func TestBench(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Grootfspool Suite")
+	RunSpecs(t, "Bench Suite")
 }
