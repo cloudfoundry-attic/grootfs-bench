@@ -66,11 +66,13 @@ var _ = Describe("Job", func() {
 
 	Describe("SummarizeResults", func() {
 		var (
-			results chan *bench.Result
+			results       chan *bench.Result
+			totalDuration time.Duration
 		)
 
 		BeforeEach(func() {
 			results = make(chan *bench.Result, 100)
+			totalDuration = time.Second * 20
 		})
 
 		JustBeforeEach(func() {
@@ -84,7 +86,7 @@ var _ = Describe("Job", func() {
 
 		It("returns the results summarized", func() {
 			close(results)
-			summary := bench.SummarizeResults(2, results)
+			summary := bench.SummarizeResults(totalDuration, 2, results)
 
 			Expect(summary.TotalBundles).To(Equal(2))
 			Expect(summary.BundlesPerSecond).To(BeNumerically("~", 0.099, 0.1))
@@ -103,20 +105,20 @@ var _ = Describe("Job", func() {
 
 			It("returns the total errors", func() {
 				close(results)
-				summary := bench.SummarizeResults(2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, results)
 				Expect(summary.TotalErrorsAmt).To(Equal(1))
 			})
 
 			It("returns the error rate", func() {
 				close(results)
-				summary := bench.SummarizeResults(2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, results)
 				// 33.33 because we're creating 2 in the outer BeforeEach
 				Expect(summary.ErrorRate).To(BeNumerically(">", 33.33))
 			})
 
 			It("ignores the the failures for AverageTimePerBundle metrics", func() {
 				close(results)
-				summary := bench.SummarizeResults(2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, results)
 				// 10 because of the outer BeforeEach
 				Expect(summary.AverageTimePerBundle).To(Equal(float64(10)))
 			})

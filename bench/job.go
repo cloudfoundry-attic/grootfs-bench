@@ -42,10 +42,12 @@ func (j *Job) Run(printer Printer) {
 
 	j.results = make(chan *Result, j.TotalBundles)
 
+	start := time.Now()
 	j.runWorkers()
+	totalDuration := time.Since(start)
 
 	close(j.results)
-	summary := SummarizeResults(j.Concurrency, j.results)
+	summary := SummarizeResults(totalDuration, j.Concurrency, j.results)
 	fmt.Fprint(os.Stdout, string(printer.Print(summary)))
 }
 
@@ -113,16 +115,14 @@ type Summary struct {
 	ConcurrencyFactor    int           `json:"concurrency_factor"`
 }
 
-func SummarizeResults(concurrency int, results chan *Result) Summary {
+func SummarizeResults(totalDuration time.Duration, concurrency int, results chan *Result) Summary {
 	summary := Summary{
 		ConcurrencyFactor: concurrency,
+		TotalDuration:     totalDuration,
 	}
 
 	averageTimePerBundle := 0.0
-	start := time.Now()
-	end := time.Now()
 	for res := range results {
-		end = end.Add(res.Duration)
 		summary.TotalBundles++
 
 		if res.Err != nil {
@@ -132,7 +132,6 @@ func SummarizeResults(concurrency int, results chan *Result) Summary {
 		}
 	}
 
-	totalDuration := end.Sub(start)
 	createdBundles := float64(summary.TotalBundles - summary.TotalErrorsAmt)
 	summary.BundlesPerSecond = createdBundles / totalDuration.Seconds()
 	summary.ErrorRate = float64(summary.TotalErrorsAmt*100) / float64(summary.TotalBundles)
