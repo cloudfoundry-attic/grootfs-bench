@@ -12,39 +12,34 @@ import (
 	"time"
 )
 
-var (
-	benchBinPath string
-)
+var metricsEndpoint = "https://app.datadoghq.com/api/v1/series?api_key=" + os.Getenv("DATADOG_API_KEY")
 
-var dogURL = "https://app.datadoghq.com/api/v1/series?api_key=" + os.Getenv("DATADOG_API_KEY")
-
-func main() {
-	flag.StringVar(&benchBinPath, "benchBinPath", "", "")
-	flag.Parse()
+func benchmarkCommand() error {
 
 	args := fmt.Sprintf("%s", strings.Join(flag.Args(), " "))
 	// We need to strip the first and last char because of `flag` package thinks
 	// we're passing arguments
 	args = args[1 : len(args)-1]
-
 	// We cannot send one "big string" to exec.Cmd
 	cmd := exec.Command(benchBinPath, strings.Split(args, " ")...)
 	out, err := cmd.Output()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	fmt.Printf("sending the following metrics to datadog:\n%+v\n", string(out))
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(out, &result); err != nil {
-		panic(err)
+		return err
 	}
 
 	series := createMetricSeries(result)
 	emitMetric(map[string]interface{}{
 		"series": series,
 	})
+
+	return nil
 }
 
 func createMetricSeries(result map[string]interface{}) []map[string]interface{} {
@@ -72,15 +67,12 @@ func createMetricSeries(result map[string]interface{}) []map[string]interface{} 
 }
 
 func emitMetric(req interface{}) {
-	if os.Getenv("DATADOG_API_KEY") == "" {
-		panic("datadog api key not specified")
-	}
 	buf, err := json.Marshal(req)
 	if err != nil {
 		panic(fmt.Errorf("Failed to marshal data: %s", err))
 		return
 	}
-	response, err := http.Post(dogURL, "application/json", bytes.NewReader(buf))
+	response, err := http.Post(metricsEndpoint, "application/json", bytes.NewReader(buf))
 	if err != nil {
 		panic(fmt.Errorf("Failed to send request to Datadog: %s", err))
 		return
