@@ -9,5 +9,4 @@ fi
 
 echo "I AM BENCH" | grootsay
 
-chmod u+s $(whereis drax)
 ginkgo -r -p -race
