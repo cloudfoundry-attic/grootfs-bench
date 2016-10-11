@@ -18,6 +18,7 @@ func (TextPrinter) Print(summary Summary) []byte {
 
 	buffer.WriteString(fmt.Sprintf("\nTotal bundles requested: %d\n", summary.TotalBundles))
 	buffer.WriteString(fmt.Sprintf("Concurrency factor.....: %d\n", summary.ConcurrencyFactor))
+	buffer.WriteString(fmt.Sprintf("Using quota?...........: %t\n", summary.RanWithQuota))
 	buffer.WriteString(fmt.Sprintf("\r........................                     \n"))
 	buffer.WriteString(fmt.Sprintf("Total duration.........: %s\n", summary.TotalDuration))
 	buffer.WriteString(fmt.Sprintf("Bundles per second.....: %.3f\n", summary.BundlesPerSecond))

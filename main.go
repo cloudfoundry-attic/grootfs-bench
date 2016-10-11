@@ -45,6 +45,10 @@ func main() {
 			Value: "docker:///busybox:latest",
 		},
 		cli.BoolFlag{
+			Name:  "with-quota",
+			Usage: "add quotas to the image creation",
+		},
+		cli.BoolFlag{
 			Name:  "nospin",
 			Usage: "turn off the awesome spinner, you monster",
 		},
@@ -85,6 +89,7 @@ func main() {
 			Runner:         cmdRunner,
 			GrootFSBinPath: grootfs,
 			StorePath:      storePath,
+			UseQuota:       ctx.Bool("with-quota"),
 			Image:          image,
 			Concurrency:    concurrency,
 			TotalBundles:   totalBundlesAmt,

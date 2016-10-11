@@ -44,7 +44,7 @@ var _ = Describe("JsonPrinter", func() {
 	Describe("Print", func() {
 		It("prints the summary in json", func() {
 			summary := bench.JsonPrinter([]byte{}).Print(summary)
-			Expect(summary).To(MatchJSON(`{"total_duration":0,"bundles_per_second":0,"average_time_per_bundle":0,"total_errors_amt":0,"error_rate":0,"total_bundles":0,"concurrency_factor":0}`))
+			Expect(summary).To(MatchJSON(`{"total_duration":0,"bundles_per_second":0,"ran_with_quota":false,"average_time_per_bundle":0,"total_errors_amt":0,"error_rate":0,"total_bundles":0,"concurrency_factor":0}`))
 		})
 	})
 })

@@ -23,6 +23,9 @@ type Job struct {
 	// The image to be downloaded
 	Image string
 
+	// Run benchmark using quotas
+	UseQuota bool
+
 	// The number of concurrent workers to run
 	Concurrency int
 
@@ -47,7 +50,7 @@ func (j *Job) Run(printer Printer) {
 	totalDuration := time.Since(start)
 
 	close(j.results)
-	summary := SummarizeResults(totalDuration, j.Concurrency, j.results)
+	summary := SummarizeResults(totalDuration, j.Concurrency, j.UseQuota, j.results)
 	fmt.Fprint(os.Stdout, string(printer.Print(summary)))
 }
 
@@ -87,13 +90,22 @@ func (j *Job) run(i int) {
 }
 
 func (j *Job) grootfsCmd(workerId int) *exec.Cmd {
-	return exec.Command(
-		j.GrootFSBinPath,
+	args := []string{
 		"--store",
 		j.StorePath,
 		"create",
+	}
+
+	if j.UseQuota {
+		args = append(args, "--disk-limit-size-bytes", "1019430400")
+	}
+
+	args = append(args,
 		j.Image,
-		fmt.Sprintf("image-%d-%d", workerId, time.Now().UnixNano()))
+		fmt.Sprintf("image-%d-%d", workerId, time.Now().UnixNano()),
+	)
+
+	return exec.Command(j.GrootFSBinPath, args...)
 }
 
 type Result struct {
@@ -108,6 +120,7 @@ type Result struct {
 type Summary struct {
 	TotalDuration        time.Duration `json:"total_duration"`
 	BundlesPerSecond     float64       `json:"bundles_per_second"`
+	RanWithQuota         bool          `json:"ran_with_quota"`
 	AverageTimePerBundle float64       `json:"average_time_per_bundle"`
 	TotalErrorsAmt       int           `json:"total_errors_amt"`
 	ErrorRate            float64       `json:"error_rate"`
@@ -115,10 +128,11 @@ type Summary struct {
 	ConcurrencyFactor    int           `json:"concurrency_factor"`
 }
 
-func SummarizeResults(totalDuration time.Duration, concurrency int, results chan *Result) Summary {
+func SummarizeResults(totalDuration time.Duration, concurrency int, useQuota bool, results chan *Result) Summary {
 	summary := Summary{
 		ConcurrencyFactor: concurrency,
 		TotalDuration:     totalDuration,
+		RanWithQuota:      useQuota,
 	}
 
 	averageTimePerBundle := 0.0

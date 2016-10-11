@@ -47,6 +47,33 @@ var _ = Describe("Job", func() {
 			}
 		})
 
+		Context("when UseQuota is true", func() {
+			It("runs grootfs with --disk-limit-size-bytes flag", func() {
+				job := &bench.Job{
+					Runner:         fakeCmdRunner,
+					GrootFSBinPath: "/path/to/grootfs",
+					StorePath:      "/store/path",
+					Image:          "docker:///busybox",
+					UseQuota:       true,
+					TotalBundles:   11,
+					Concurrency:    3,
+				}
+				job.Run(fakePrinter)
+
+				executedCommands := fakeCmdRunner.ExecutedCommands()
+				Expect(len(executedCommands)).To(Equal(11))
+
+				for _, cmd := range fakeCmdRunner.ExecutedCommands() {
+					Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+					Expect(cmd.Args[2]).To(Equal("/store/path"))
+					Expect(cmd.Args[3]).To(Equal("create"))
+					Expect(cmd.Args[4]).To(Equal("--disk-limit-size-bytes"))
+					Expect(cmd.Args[5]).To(Equal("1019430400"))
+					Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
+				}
+			})
+		})
+
 		Context("when not providing concurrency level", func() {
 			It("sets the default to the # of cpus", func() {
 				job := &bench.Job{}
@@ -86,7 +113,7 @@ var _ = Describe("Job", func() {
 
 		It("returns the results summarized", func() {
 			close(results)
-			summary := bench.SummarizeResults(totalDuration, 2, results)
+			summary := bench.SummarizeResults(totalDuration, 2, false, results)
 
 			Expect(summary.TotalBundles).To(Equal(2))
 			Expect(summary.BundlesPerSecond).To(BeNumerically("~", 0.099, 0.1))
@@ -105,22 +132,29 @@ var _ = Describe("Job", func() {
 
 			It("returns the total errors", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, false, results)
 				Expect(summary.TotalErrorsAmt).To(Equal(1))
 			})
 
 			It("returns the error rate", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, false, results)
 				// 33.33 because we're creating 2 in the outer BeforeEach
 				Expect(summary.ErrorRate).To(BeNumerically(">", 33.33))
 			})
 
 			It("ignores the the failures for AverageTimePerBundle metrics", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, results)
+				summary := bench.SummarizeResults(totalDuration, 2, false, results)
 				// 10 because of the outer BeforeEach
 				Expect(summary.AverageTimePerBundle).To(Equal(float64(10)))
+			})
+
+			It("sets RanWithQuota to true if quota was applied", func() {
+				close(results)
+				summary := bench.SummarizeResults(totalDuration, 2, true, results)
+				// 10 because of the outer BeforeEach
+				Expect(summary.RanWithQuota).To(BeTrue())
 			})
 		})
 	})
