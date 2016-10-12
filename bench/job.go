@@ -149,8 +149,11 @@ func SummarizeResults(totalDuration time.Duration, concurrency int, useQuota boo
 	createdBundles := float64(summary.TotalBundles - summary.TotalErrorsAmt)
 	summary.BundlesPerSecond = createdBundles / totalDuration.Seconds()
 	summary.ErrorRate = float64(summary.TotalErrorsAmt*100) / float64(summary.TotalBundles)
-	summary.AverageTimePerBundle = averageTimePerBundle / createdBundles
+	if createdBundles == float64(0) {
+		summary.AverageTimePerBundle = float64(-1)
+	} else {
+		summary.AverageTimePerBundle = averageTimePerBundle / createdBundles
+	}
 	summary.TotalDuration = totalDuration
-
 	return summary
 }

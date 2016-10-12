@@ -122,6 +122,20 @@ var _ = Describe("Job", func() {
 			Expect(summary.ConcurrencyFactor).To(Equal(2))
 		})
 
+		Context("when there are 0 images created", func() {
+			It("sets the average time per bundle to -1", func() {
+				results = make(chan *bench.Result, 1)
+				results <- &bench.Result{
+					Err:      errors.New("failed"),
+					Duration: 10 * time.Second,
+				}
+				close(results)
+				summary := bench.SummarizeResults(totalDuration, 1, false, results)
+
+				Expect(summary.AverageTimePerBundle).To(Equal(float64(-1)))
+			})
+		})
+
 		Context("when command fails", func() {
 			JustBeforeEach(func() {
 				results <- &bench.Result{
