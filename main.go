@@ -15,7 +15,7 @@ func main() {
 	bench := cli.NewApp()
 	bench.Name = "grootfs-bench"
 	bench.Usage = "grootfs awesome benchmarking tool"
-	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <btrfs-store> --bundles <n> --concurrency <c> --image <docker:///img>"
+	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <btrfs-store> --log-level <debug|info|warn> --bundles <n> --concurrency <c> --image <docker:///img>"
 	bench.Version = "0.1.0"
 
 	bench.Flags = []cli.Flag{
@@ -40,6 +40,11 @@ func main() {
 			Value: "/var/lib/grootfs",
 		},
 		cli.StringFlag{
+			Name:  "log-level",
+			Usage: "what the name says",
+			Value: "debug",
+		},
+		cli.StringFlag{
 			Name:  "image",
 			Usage: "image to use",
 			Value: "docker:///busybox:latest",
@@ -60,6 +65,7 @@ func main() {
 
 	bench.Action = func(ctx *cli.Context) error {
 		storePath := ctx.String("store")
+		logLevel := ctx.String("log-level")
 		image := ctx.String("image")
 		grootfs := ctx.String("gbin")
 		totalBundlesAmt := ctx.Int("bundles")
@@ -89,6 +95,7 @@ func main() {
 			Runner:         cmdRunner,
 			GrootFSBinPath: grootfs,
 			StorePath:      storePath,
+			LogLevel:       logLevel,
 			UseQuota:       ctx.Bool("with-quota"),
 			Image:          image,
 			Concurrency:    concurrency,

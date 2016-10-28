@@ -41,4 +41,15 @@ var _ = Describe("Bench", func() {
 		})
 	})
 
+	Context("when grootfs fails", func() {
+		It("returns the error message and the bundle number", func() {
+			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--concurrency", "1", "--bundles", "1", "--image", "fail-this")
+			buffer := gbytes.NewBuffer()
+			cmd.Stdout = buffer
+			cmd.Stderr = buffer
+			err := cmd.Run()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buffer).Should(gbytes.Say("could not create bundle 1: exit status 1, fake grootfs failed"))
+		})
+	})
 })

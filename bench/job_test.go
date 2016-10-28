@@ -30,6 +30,7 @@ var _ = Describe("Job", func() {
 				Runner:         fakeCmdRunner,
 				GrootFSBinPath: "/path/to/grootfs",
 				StorePath:      "/store/path",
+				LogLevel:       "debug",
 				Image:          "docker:///busybox",
 				TotalBundles:   11,
 				Concurrency:    3,
@@ -42,8 +43,9 @@ var _ = Describe("Job", func() {
 			for _, cmd := range fakeCmdRunner.ExecutedCommands() {
 				Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
 				Expect(cmd.Args[2]).To(Equal("/store/path"))
-				Expect(cmd.Args[3]).To(Equal("create"))
-				Expect(cmd.Args[4]).To(Equal("docker:///busybox"))
+				Expect(cmd.Args[4]).To(Equal("debug"))
+				Expect(cmd.Args[5]).To(Equal("create"))
+				Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
 			}
 		})
 
@@ -53,6 +55,7 @@ var _ = Describe("Job", func() {
 					Runner:         fakeCmdRunner,
 					GrootFSBinPath: "/path/to/grootfs",
 					StorePath:      "/store/path",
+					LogLevel:       "debug",
 					Image:          "docker:///busybox",
 					UseQuota:       true,
 					TotalBundles:   11,
@@ -66,10 +69,11 @@ var _ = Describe("Job", func() {
 				for _, cmd := range fakeCmdRunner.ExecutedCommands() {
 					Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
 					Expect(cmd.Args[2]).To(Equal("/store/path"))
-					Expect(cmd.Args[3]).To(Equal("create"))
-					Expect(cmd.Args[4]).To(Equal("--disk-limit-size-bytes"))
-					Expect(cmd.Args[5]).To(Equal("1019430400"))
-					Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
+					Expect(cmd.Args[4]).To(Equal("debug"))
+					Expect(cmd.Args[5]).To(Equal("create"))
+					Expect(cmd.Args[6]).To(Equal("--disk-limit-size-bytes"))
+					Expect(cmd.Args[7]).To(Equal("1019430400"))
+					Expect(cmd.Args[8]).To(Equal("docker:///busybox"))
 				}
 			})
 		})

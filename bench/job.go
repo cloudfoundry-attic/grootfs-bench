@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +20,9 @@ type Job struct {
 
 	// The GrootFS store path, where blobs/bundles/cache are stored
 	StorePath string
+
+	// Does what it says on the tin
+	LogLevel string
 
 	// The image to be downloaded
 	Image string
@@ -82,9 +86,16 @@ func (j *Job) run(i int) {
 	start := time.Now()
 	cmd := j.grootfsCmd(i)
 
-	err := j.Runner.Run(cmd)
+	buffer := bytes.NewBuffer([]byte{})
+	cmd.Stderr = buffer
+	cmd.Stdout = buffer
+
+	var cmdErr error
+	if err := j.Runner.Run(cmd); err != nil {
+		cmdErr = fmt.Errorf("%s, %s", err, buffer.String())
+	}
 	j.results <- &Result{
-		Err:      err,
+		Err:      cmdErr,
 		Duration: time.Since(start),
 	}
 }
@@ -93,6 +104,8 @@ func (j *Job) grootfsCmd(workerId int) *exec.Cmd {
 	args := []string{
 		"--store",
 		j.StorePath,
+		"--log-level",
+		j.LogLevel,
 		"create",
 	}
 
@@ -141,6 +154,7 @@ func SummarizeResults(totalDuration time.Duration, concurrency int, useQuota boo
 
 		if res.Err != nil {
 			summary.TotalErrorsAmt++
+			fmt.Printf("could not create bundle %d: %s\n", summary.TotalBundles, res.Err)
 		} else {
 			averageTimePerBundle += res.Duration.Seconds()
 		}
