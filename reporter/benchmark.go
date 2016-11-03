@@ -22,6 +22,7 @@ func benchmarkCommand() error {
 	args = args[1 : len(args)-1]
 	// We cannot send one "big string" to exec.Cmd
 	cmd := exec.Command(benchBinPath, strings.Split(args, " ")...)
+	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
 		return err

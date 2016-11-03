@@ -9,10 +9,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
+	"github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Bench", func() {
-
 	It("returns the output in plain text by default", func() {
 		cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--bundles", "10")
 		buffer := gbytes.NewBuffer()
@@ -21,12 +21,6 @@ var _ = Describe("Bench", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(buffer).Should(gbytes.Say("Total bundles requested"))
-		Expect(buffer).Should(gbytes.Say("Concurrency factor"))
-		Expect(buffer).Should(gbytes.Say("Total duration"))
-		Expect(buffer).Should(gbytes.Say("Bundles per second"))
-		Expect(buffer).Should(gbytes.Say("Average time per bundle"))
-		Expect(buffer).Should(gbytes.Say("Total errors"))
-		Expect(buffer).Should(gbytes.Say("Error Rate"))
 	})
 
 	Context("when --json is provided", func() {
@@ -44,12 +38,11 @@ var _ = Describe("Bench", func() {
 	Context("when grootfs fails", func() {
 		It("returns the error message and the bundle number", func() {
 			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--concurrency", "1", "--bundles", "1", "--image", "fail-this")
-			buffer := gbytes.NewBuffer()
-			cmd.Stdout = buffer
-			cmd.Stderr = buffer
-			err := cmd.Run()
+			sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(buffer).Should(gbytes.Say("could not create bundle 1: exit status 1, fake grootfs failed"))
+			Eventually(sess).ShouldNot(gexec.Exit(0))
+
+			Eventually(sess.Err).Should(gbytes.Say("could not create bundle 1: exit status 1, fake grootfs failed"))
 		})
 	})
 })

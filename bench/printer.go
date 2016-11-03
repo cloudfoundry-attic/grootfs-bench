@@ -1,40 +1,66 @@
 package bench
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"html/template"
+	"io"
 )
 
-//go:generate counterfeiter . Printer
 type Printer interface {
-	Print(summary Summary) []byte
+	Print(summary Summary) error
 }
 
-type TextPrinter []byte
-
-func (TextPrinter) Print(summary Summary) []byte {
-	buffer := bytes.NewBuffer([]byte{})
-
-	buffer.WriteString(fmt.Sprintf("\nTotal bundles requested: %d\n", summary.TotalBundles))
-	buffer.WriteString(fmt.Sprintf("Concurrency factor.....: %d\n", summary.ConcurrencyFactor))
-	buffer.WriteString(fmt.Sprintf("Using quota?...........: %t\n", summary.RanWithQuota))
-	buffer.WriteString(fmt.Sprintf("\r........................                     \n"))
-	buffer.WriteString(fmt.Sprintf("Total duration.........: %s\n", summary.TotalDuration))
-	buffer.WriteString(fmt.Sprintf("Bundles per second.....: %.3f\n", summary.BundlesPerSecond))
-	buffer.WriteString(fmt.Sprintf("Average time per bundle: %.3fs\n", summary.AverageTimePerBundle))
-	buffer.WriteString(fmt.Sprintf("Total errors...........: %d\n", summary.TotalErrorsAmt))
-	buffer.WriteString(fmt.Sprintf("Error Rate.............: %.3f\n", summary.ErrorRate))
-
-	return buffer.Bytes()
+func NewTextPrinter(out, err io.Writer) *TextPrinter {
+	return &TextPrinter{out: out, err: err}
 }
 
-type JsonPrinter []byte
+type TextPrinter struct {
+	out io.Writer
+	err io.Writer
+}
 
-func (JsonPrinter) Print(summary Summary) []byte {
-	sum, err := json.Marshal(summary)
+func (p *TextPrinter) Print(summary Summary) error {
+	printErrors(summary, p.err)
+
+	tmplText := `
+Total bundles requested: {{.TotalBundles}}
+Concurrency factor.....: {{.ConcurrencyFactor}}
+Using quota?...........: {{.RanWithQuota}}
+........................
+Total duration.........: {{.TotalDuration}}
+Bundles per second.....: {{printf "%.3f" .BundlesPerSecond}}
+Average time per bundle: {{printf "%.3f" .AverageTimePerBundle}}s
+Total errors...........: {{.TotalErrorsAmt}}
+Error Rate.............: {{printf "%.3f" .ErrorRate}}
+`
+	tmpl, err := template.New("groot").Parse(tmplText)
 	if err != nil {
-		return []byte{}
+		return err
 	}
-	return sum
+
+	return tmpl.Execute(p.out, summary)
+}
+
+func NewJsonPrinter(out, err io.Writer) *JsonPrinter {
+	return &JsonPrinter{out: out, err: err}
+}
+
+type JsonPrinter struct {
+	out io.Writer
+	err io.Writer
+}
+
+func (j *JsonPrinter) Print(summary Summary) error {
+	printErrors(summary, j.err)
+
+	return json.NewEncoder(j.out).Encode(summary)
+}
+
+func printErrors(summary Summary, buffer io.Writer) {
+	if len(summary.ErrorMessages) > 0 {
+		for _, message := range summary.ErrorMessages {
+			fmt.Fprintf(buffer, message)
+		}
+	}
 }

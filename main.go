@@ -79,19 +79,19 @@ func main() {
 			style := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % 36
 			spinner = spinnerpkg.New(spinnerpkg.CharSets[style], 100*time.Millisecond)
 			spinner.Prefix = "Doing crazy maths "
-			spinner.Color("green")
+			must(spinner.Color("green"))
 			spinner.Start()
 			defer spinner.Stop()
 		}
 
 		var printer benchpkg.Printer
-		printer = benchpkg.TextPrinter([]byte{})
+		printer = benchpkg.NewTextPrinter(os.Stdout, os.Stderr)
 		if jsonify {
-			printer = benchpkg.JsonPrinter([]byte{})
+			printer = benchpkg.NewJsonPrinter(os.Stdout, os.Stderr)
 		}
 
 		cmdRunner := linux_command_runner.New()
-		(&benchpkg.Job{
+		summary := (&benchpkg.Job{
 			Runner:         cmdRunner,
 			GrootFSBinPath: grootfs,
 			StorePath:      storePath,
@@ -100,10 +100,17 @@ func main() {
 			Image:          image,
 			Concurrency:    concurrency,
 			TotalBundles:   totalBundlesAmt,
-		}).Run(printer)
+		}).Run()
 
-		return nil
+		return printer.Print(summary)
 	}
 
-	bench.Run(os.Args)
+	// silencing the linter
+	_ = bench.Run(os.Args)
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

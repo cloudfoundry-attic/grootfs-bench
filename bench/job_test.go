@@ -2,26 +2,21 @@ package bench_test
 
 import (
 	"errors"
+	"os/exec"
 	"runtime"
 	"time"
 
 	"code.cloudfoundry.org/commandrunner/fake_command_runner"
 	"code.cloudfoundry.org/grootfs-bench/bench"
-	"code.cloudfoundry.org/grootfs-bench/bench/benchfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Job", func() {
-
-	var (
-		fakeCmdRunner *fake_command_runner.FakeCommandRunner
-		fakePrinter   *benchfakes.FakePrinter
-	)
+	var fakeCmdRunner *fake_command_runner.FakeCommandRunner
 
 	BeforeEach(func() {
 		fakeCmdRunner = fake_command_runner.New()
-		fakePrinter = new(benchfakes.FakePrinter)
 	})
 
 	Describe("Run", func() {
@@ -35,7 +30,7 @@ var _ = Describe("Job", func() {
 				TotalBundles:   11,
 				Concurrency:    3,
 			}
-			job.Run(fakePrinter)
+			job.Run()
 
 			executedCommands := fakeCmdRunner.ExecutedCommands()
 			Expect(len(executedCommands)).To(Equal(11))
@@ -61,7 +56,7 @@ var _ = Describe("Job", func() {
 					TotalBundles:   11,
 					Concurrency:    3,
 				}
-				job.Run(fakePrinter)
+				job.Run()
 
 				executedCommands := fakeCmdRunner.ExecutedCommands()
 				Expect(len(executedCommands)).To(Equal(11))
@@ -78,20 +73,37 @@ var _ = Describe("Job", func() {
 			})
 		})
 
-		Context("when not providing concurrency level", func() {
-			It("sets the default to the # of cpus", func() {
-				job := &bench.Job{}
-				job.Run(fakePrinter)
+		Context("when something fails", func() {
+			BeforeEach(func() {
+				fakeCmdRunner.WhenRunning(fake_command_runner.CommandSpec{}, func(cmd *exec.Cmd) error {
+					cmd.Stderr.Write([]byte("groot failed to make a bundle"))
+					return errors.New("exit status 1")
+				})
+			})
 
-				Expect(job.Concurrency).To(Equal(runtime.NumCPU()))
+			It("returns the errors", func() {
+				job := &bench.Job{
+					Runner:       fakeCmdRunner,
+					TotalBundles: 10,
+				}
+				summary := job.Run()
+
+				Expect(summary.ErrorMessages).To(HaveLen(10))
+				for _, message := range summary.ErrorMessages {
+					Expect(message).To(ContainSubstring("groot failed to make a bundle"))
+				}
 			})
 		})
 
-		It("prints the result", func() {
-			job := &bench.Job{}
-			job.Run(fakePrinter)
+		Context("when not providing concurrency level", func() {
+			It("sets the default to the # of cpus", func() {
+				job := &bench.Job{
+					Runner: fakeCmdRunner,
+				}
+				summary := job.Run()
 
-			Expect(fakePrinter.PrintCallCount()).To(Equal(1))
+				Expect(summary.ConcurrencyFactor).To(Equal(runtime.NumCPU()))
+			})
 		})
 	})
 
@@ -99,6 +111,7 @@ var _ = Describe("Job", func() {
 		var (
 			results       chan *bench.Result
 			totalDuration time.Duration
+			spec          bench.SumSpec
 		)
 
 		BeforeEach(func() {
@@ -117,7 +130,14 @@ var _ = Describe("Job", func() {
 
 		It("returns the results summarized", func() {
 			close(results)
-			summary := bench.SummarizeResults(totalDuration, 2, false, results)
+
+			spec = bench.SumSpec{
+				Duration:    totalDuration,
+				Concurrency: 2,
+				UseQuota:    false,
+				ResChan:     results,
+			}
+			summary := bench.SummarizeResults(spec)
 
 			Expect(summary.TotalBundles).To(Equal(2))
 			Expect(summary.BundlesPerSecond).To(BeNumerically("~", 0.099, 0.1))
@@ -134,13 +154,28 @@ var _ = Describe("Job", func() {
 					Duration: 10 * time.Second,
 				}
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 1, false, results)
+				spec = bench.SumSpec{
+					Duration:    totalDuration,
+					Concurrency: 2,
+					UseQuota:    false,
+					ResChan:     results,
+				}
+				summary := bench.SummarizeResults(spec)
 
 				Expect(summary.AverageTimePerBundle).To(Equal(float64(-1)))
 			})
 		})
 
 		Context("when command fails", func() {
+			BeforeEach(func() {
+				spec = bench.SumSpec{
+					Duration:    totalDuration,
+					Concurrency: 2,
+					UseQuota:    false,
+					ResChan:     results,
+				}
+			})
+
 			JustBeforeEach(func() {
 				results <- &bench.Result{
 					Err:      errors.New("failed to execute grootfs"),
@@ -150,27 +185,33 @@ var _ = Describe("Job", func() {
 
 			It("returns the total errors", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, false, results)
+				summary := bench.SummarizeResults(spec)
 				Expect(summary.TotalErrorsAmt).To(Equal(1))
 			})
 
 			It("returns the error rate", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, false, results)
+				summary := bench.SummarizeResults(spec)
 				// 33.33 because we're creating 2 in the outer BeforeEach
 				Expect(summary.ErrorRate).To(BeNumerically(">", 33.33))
 			})
 
 			It("ignores the the failures for AverageTimePerBundle metrics", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, false, results)
+				summary := bench.SummarizeResults(spec)
 				// 10 because of the outer BeforeEach
 				Expect(summary.AverageTimePerBundle).To(Equal(float64(10)))
 			})
 
 			It("sets RanWithQuota to true if quota was applied", func() {
 				close(results)
-				summary := bench.SummarizeResults(totalDuration, 2, true, results)
+				spec = bench.SumSpec{
+					Duration:    totalDuration,
+					Concurrency: 2,
+					UseQuota:    true,
+					ResChan:     results,
+				}
+				summary := bench.SummarizeResults(spec)
 				// 10 because of the outer BeforeEach
 				Expect(summary.RanWithQuota).To(BeTrue())
 			})
