@@ -20,14 +20,14 @@ var _ = Describe("Job", func() {
 	})
 
 	Describe("Run", func() {
-		It("creates the number of bundles provided", func() {
+		It("creates the number of images provided", func() {
 			job := &bench.Job{
 				Runner:         fakeCmdRunner,
 				GrootFSBinPath: "/path/to/grootfs",
 				StorePath:      "/store/path",
 				LogLevel:       "debug",
-				Image:          "docker:///busybox",
-				TotalBundles:   11,
+				BaseImage:      "docker:///busybox",
+				TotalImages:   11,
 				Concurrency:    3,
 			}
 			job.Run()
@@ -51,9 +51,9 @@ var _ = Describe("Job", func() {
 					GrootFSBinPath: "/path/to/grootfs",
 					StorePath:      "/store/path",
 					LogLevel:       "debug",
-					Image:          "docker:///busybox",
+					BaseImage:      "docker:///busybox",
 					UseQuota:       true,
-					TotalBundles:   11,
+					TotalImages:   11,
 					Concurrency:    3,
 				}
 				job.Run()
@@ -76,7 +76,7 @@ var _ = Describe("Job", func() {
 		Context("when something fails", func() {
 			BeforeEach(func() {
 				fakeCmdRunner.WhenRunning(fake_command_runner.CommandSpec{}, func(cmd *exec.Cmd) error {
-					cmd.Stderr.Write([]byte("groot failed to make a bundle"))
+					cmd.Stderr.Write([]byte("groot failed to make a image"))
 					return errors.New("exit status 1")
 				})
 			})
@@ -84,13 +84,13 @@ var _ = Describe("Job", func() {
 			It("returns the errors", func() {
 				job := &bench.Job{
 					Runner:       fakeCmdRunner,
-					TotalBundles: 10,
+					TotalImages: 10,
 				}
 				summary := job.Run()
 
 				Expect(summary.ErrorMessages).To(HaveLen(10))
 				for _, message := range summary.ErrorMessages {
-					Expect(message).To(ContainSubstring("groot failed to make a bundle"))
+					Expect(message).To(ContainSubstring("groot failed to make a image"))
 				}
 			})
 		})
@@ -139,15 +139,15 @@ var _ = Describe("Job", func() {
 			}
 			summary := bench.SummarizeResults(spec)
 
-			Expect(summary.TotalBundles).To(Equal(2))
-			Expect(summary.BundlesPerSecond).To(BeNumerically("~", 0.099, 0.1))
+			Expect(summary.TotalImages).To(Equal(2))
+			Expect(summary.ImagesPerSecond).To(BeNumerically("~", 0.099, 0.1))
 			Expect(summary.TotalDuration).To(BeNumerically("~", time.Second*20, time.Second*21))
-			Expect(summary.AverageTimePerBundle).To(Equal(float64(10)))
+			Expect(summary.AverageTimePerImage).To(Equal(float64(10)))
 			Expect(summary.ConcurrencyFactor).To(Equal(2))
 		})
 
 		Context("when there are 0 images created", func() {
-			It("sets the average time per bundle to -1", func() {
+			It("sets the average time per image to -1", func() {
 				results = make(chan *bench.Result, 1)
 				results <- &bench.Result{
 					Err:      errors.New("failed"),
@@ -162,7 +162,7 @@ var _ = Describe("Job", func() {
 				}
 				summary := bench.SummarizeResults(spec)
 
-				Expect(summary.AverageTimePerBundle).To(Equal(float64(-1)))
+				Expect(summary.AverageTimePerImage).To(Equal(float64(-1)))
 			})
 		})
 
@@ -196,11 +196,11 @@ var _ = Describe("Job", func() {
 				Expect(summary.ErrorRate).To(BeNumerically(">", 33.33))
 			})
 
-			It("ignores the the failures for AverageTimePerBundle metrics", func() {
+			It("ignores the the failures for AverageTimePerImage metrics", func() {
 				close(results)
 				summary := bench.SummarizeResults(spec)
 				// 10 because of the outer BeforeEach
-				Expect(summary.AverageTimePerBundle).To(Equal(float64(10)))
+				Expect(summary.AverageTimePerImage).To(Equal(float64(10)))
 			})
 
 			It("sets RanWithQuota to true if quota was applied", func() {

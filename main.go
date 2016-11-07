@@ -15,7 +15,7 @@ func main() {
 	bench := cli.NewApp()
 	bench.Name = "grootfs-bench"
 	bench.Usage = "grootfs awesome benchmarking tool"
-	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <btrfs-store> --log-level <debug|info|warn> --bundles <n> --concurrency <c> --image <docker:///img>"
+	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <btrfs-store> --log-level <debug|info|warn> --images <n> --concurrency <c> --base-image <docker:///img>"
 	bench.Version = "0.1.0"
 
 	bench.Flags = []cli.Flag{
@@ -25,8 +25,8 @@ func main() {
 			Value: "grootfs",
 		},
 		cli.StringFlag{
-			Name:  "bundles",
-			Usage: "number of bundles to create",
+			Name:  "images",
+			Usage: "number of images to create",
 			Value: "500",
 		},
 		cli.StringFlag{
@@ -45,8 +45,8 @@ func main() {
 			Value: "debug",
 		},
 		cli.StringFlag{
-			Name:  "image",
-			Usage: "image to use",
+			Name:  "base-image",
+			Usage: "base image to use",
 			Value: "docker:///busybox:latest",
 		},
 		cli.BoolFlag{
@@ -66,9 +66,9 @@ func main() {
 	bench.Action = func(ctx *cli.Context) error {
 		storePath := ctx.String("store")
 		logLevel := ctx.String("log-level")
-		image := ctx.String("image")
+		baseImage := ctx.String("base-image")
 		grootfs := ctx.String("gbin")
-		totalBundlesAmt := ctx.Int("bundles")
+		totalImagesAmt := ctx.Int("images")
 		concurrency := ctx.Int("concurrency")
 		nospin := ctx.Bool("nospin")
 		jsonify := ctx.Bool("json")
@@ -97,9 +97,9 @@ func main() {
 			StorePath:      storePath,
 			LogLevel:       logLevel,
 			UseQuota:       ctx.Bool("with-quota"),
-			Image:          image,
+			BaseImage:      baseImage,
 			Concurrency:    concurrency,
-			TotalBundles:   totalBundlesAmt,
+			TotalImages:   totalImagesAmt,
 		}).Run()
 
 		return printer.Print(summary)

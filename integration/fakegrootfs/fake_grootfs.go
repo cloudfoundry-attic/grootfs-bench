@@ -6,12 +6,12 @@ import (
 )
 
 func main() {
-	image := os.Args[len(os.Args)-2]
+	baseImage := os.Args[len(os.Args)-2]
 
-	if image == "fail-this" {
+	if baseImage == "fail-this" {
 		fmt.Println("fake grootfs failed")
 		os.Exit(1)
 	}
 
-	fmt.Println("/var/lib/btrfs/bundle")
+	fmt.Println("/var/lib/btrfs/image")
 }

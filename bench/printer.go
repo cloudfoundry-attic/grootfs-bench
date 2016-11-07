@@ -24,13 +24,13 @@ func (p *TextPrinter) Print(summary Summary) error {
 	printErrors(summary, p.err)
 
 	tmplText := `
-Total bundles requested: {{.TotalBundles}}
+Total images requested: {{.TotalImages}}
 Concurrency factor.....: {{.ConcurrencyFactor}}
 Using quota?...........: {{.RanWithQuota}}
 ........................
 Total duration.........: {{.TotalDuration}}
-Bundles per second.....: {{printf "%.3f" .BundlesPerSecond}}
-Average time per bundle: {{printf "%.3f" .AverageTimePerBundle}}s
+Images per second.....: {{printf "%.3f" .ImagesPerSecond}}
+Average time per image: {{printf "%.3f" .AverageTimePerImage}}s
 Total errors...........: {{.TotalErrorsAmt}}
 Error Rate.............: {{printf "%.3f" .ErrorRate}}
 `

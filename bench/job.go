@@ -17,14 +17,14 @@ type Job struct {
 	// Path to grootfs binary
 	GrootFSBinPath string
 
-	// The GrootFS store path, where blobs/bundles/cache are stored
+	// The GrootFS store path, where blobs/images/cache are stored
 	StorePath string
 
 	// Does what it says on the tin
 	LogLevel string
 
-	// The image to be downloaded
-	Image string
+	// The Base Image to be downloaded
+	BaseImage string
 
 	// Run benchmark using quotas
 	UseQuota bool
@@ -32,8 +32,8 @@ type Job struct {
 	// The number of concurrent workers to run
 	Concurrency int
 
-	// The total number of bundles to be created
-	TotalBundles int
+	// The total number of images to be created
+	TotalImages int
 
 	// Hold the results for each iteration
 	results chan *Result
@@ -46,7 +46,7 @@ func (j *Job) Run() Summary {
 		j.Concurrency = runtime.NumCPU()
 	}
 
-	j.results = make(chan *Result, j.TotalBundles)
+	j.results = make(chan *Result, j.TotalImages)
 
 	start := time.Now()
 	j.runWorkers()
@@ -64,11 +64,11 @@ func (j *Job) Run() Summary {
 
 func (j *Job) runWorkers() {
 	var wg sync.WaitGroup
-	wg.Add(j.TotalBundles)
+	wg.Add(j.TotalImages)
 
 	for i := 0; i < j.Concurrency; i++ {
 		go func(conc int) {
-			for i := 0; i < j.TotalBundles/j.Concurrency; i++ {
+			for i := 0; i < j.TotalImages/j.Concurrency; i++ {
 				defer wg.Done()
 				j.run(conc)
 			}
@@ -76,7 +76,7 @@ func (j *Job) runWorkers() {
 	}
 
 	// Handle some leftovers (i.e: 11 % 3)
-	for i := 0; i < j.TotalBundles%j.Concurrency; i++ {
+	for i := 0; i < j.TotalImages%j.Concurrency; i++ {
 		go func(i int) {
 			defer wg.Done()
 			j.run(i)
@@ -118,8 +118,8 @@ func (j *Job) grootfsCmd(workerId int) *exec.Cmd {
 	}
 
 	args = append(args,
-		j.Image,
-		fmt.Sprintf("image-%d-%d", workerId, time.Now().UnixNano()),
+		j.BaseImage,
+		fmt.Sprintf("base-image-%d-%d", workerId, time.Now().UnixNano()),
 	)
 
 	return exec.Command(j.GrootFSBinPath, args...)
@@ -143,12 +143,12 @@ type SumSpec struct {
 // Summary represents some metrics while running grootfs with given input
 type Summary struct {
 	TotalDuration        time.Duration `json:"total_duration"`
-	BundlesPerSecond     float64       `json:"bundles_per_second"`
+	ImagesPerSecond     float64       `json:"images_per_second"`
 	RanWithQuota         bool          `json:"ran_with_quota"`
-	AverageTimePerBundle float64       `json:"average_time_per_bundle"`
+	AverageTimePerImage float64       `json:"average_time_per_image"`
 	TotalErrorsAmt       int           `json:"total_errors_amt"`
 	ErrorRate            float64       `json:"error_rate"`
-	TotalBundles         int           `json:"total_bundles"`
+	TotalImages         int           `json:"total_images"`
 	ConcurrencyFactor    int           `json:"concurrency_factor"`
 	ErrorMessages        []string      `json:"-"`
 }
@@ -162,25 +162,25 @@ func SummarizeResults(spec SumSpec) Summary {
 
 	errors := []string{}
 
-	averageTimePerBundle := 0.0
+	averageTimePerImage := 0.0
 	for res := range spec.ResChan {
-		summary.TotalBundles++
+		summary.TotalImages++
 
 		if res.Err != nil {
 			summary.TotalErrorsAmt++
-			errors = append(errors, fmt.Sprintf("could not create bundle %d: %s\n", summary.TotalBundles, res.Err))
+			errors = append(errors, fmt.Sprintf("could not create image %d: %s\n", summary.TotalImages, res.Err))
 		} else {
-			averageTimePerBundle += res.Duration.Seconds()
+			averageTimePerImage += res.Duration.Seconds()
 		}
 	}
 
-	createdBundles := float64(summary.TotalBundles - summary.TotalErrorsAmt)
-	summary.BundlesPerSecond = createdBundles / spec.Duration.Seconds()
-	summary.ErrorRate = float64(summary.TotalErrorsAmt*100) / float64(summary.TotalBundles)
-	if createdBundles == float64(0) {
-		summary.AverageTimePerBundle = float64(-1)
+	createdImages := float64(summary.TotalImages - summary.TotalErrorsAmt)
+	summary.ImagesPerSecond = createdImages / spec.Duration.Seconds()
+	summary.ErrorRate = float64(summary.TotalErrorsAmt*100) / float64(summary.TotalImages)
+	if createdImages == float64(0) {
+		summary.AverageTimePerImage = float64(-1)
 	} else {
-		summary.AverageTimePerBundle = averageTimePerBundle / createdBundles
+		summary.AverageTimePerImage = averageTimePerImage / createdImages
 	}
 	summary.TotalDuration = spec.Duration
 	summary.ErrorMessages = errors
