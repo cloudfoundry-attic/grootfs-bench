@@ -25,14 +25,14 @@ func (p *TextPrinter) Print(summary Summary) error {
 
 	tmplText := `
 Total images requested: {{.TotalImages}}
-Concurrency factor.....: {{.ConcurrencyFactor}}
-Using quota?...........: {{.RanWithQuota}}
-........................
-Total duration.........: {{.TotalDuration}}
+Concurrency factor....: {{.ConcurrencyFactor}}
+Using quota?..........: {{.RanWithQuota}}
+.......................
+Total duration........: {{.TotalDuration}}
 Images per second.....: {{printf "%.3f" .ImagesPerSecond}}
 Average time per image: {{printf "%.3f" .AverageTimePerImage}}s
-Total errors...........: {{.TotalErrorsAmt}}
-Error Rate.............: {{printf "%.3f" .ErrorRate}}
+Total errors..........: {{.TotalErrorsAmt}}
+Error Rate............: {{printf "%.3f" .ErrorRate}}
 `
 	tmpl, err := template.New("groot").Parse(tmplText)
 	if err != nil {
