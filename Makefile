@@ -7,6 +7,7 @@ all:
 help:
 		@echo '    all ................................. builds the grootfs-bench cli'
 		@echo '    test ................................ runs tests locally'
+		@echo '    deps ................................ install dependencies'
 
 
 ###### Testing ################################################################
@@ -14,3 +15,5 @@ help:
 test:
 	ginkgo -r -p -race .
 
+deps:
+	glide install
