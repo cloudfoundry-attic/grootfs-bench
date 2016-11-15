@@ -40,7 +40,7 @@ var _ = Describe("Bench", func() {
 			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--concurrency", "1", "--images", "1", "--base-image", "fail-this")
 			sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess).ShouldNot(gexec.Exit(0))
+			Eventually(sess.Wait()).ShouldNot(gexec.Exit(0))
 
 			Eventually(sess.Err).Should(gbytes.Say("could not create image 1: exit status 1, fake grootfs failed"))
 		})

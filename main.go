@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"time"
@@ -99,14 +100,23 @@ func main() {
 			UseQuota:       ctx.Bool("with-quota"),
 			BaseImage:      baseImage,
 			Concurrency:    concurrency,
-			TotalImages:   totalImagesAmt,
+			TotalImages:    totalImagesAmt,
 		}).Run()
 
-		return printer.Print(summary)
+		if err := printer.Print(summary); err != nil {
+			return err
+		}
+
+		if summary.TotalErrorsAmt > 0 {
+			return fmt.Errorf("%s failed %d times", grootfs, summary.TotalErrorsAmt)
+		}
+
+		return nil
 	}
 
-	// silencing the linter
-	_ = bench.Run(os.Args)
+	if err := bench.Run(os.Args); err != nil {
+		os.Exit(1)
+	}
 }
 
 func must(err error) {
