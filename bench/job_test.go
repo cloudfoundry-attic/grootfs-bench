@@ -25,9 +25,10 @@ var _ = Describe("Job", func() {
 				Runner:         fakeCmdRunner,
 				GrootFSBinPath: "/path/to/grootfs",
 				StorePath:      "/store/path",
+				Driver:         "btrfs",
 				LogLevel:       "debug",
 				BaseImage:      "docker:///busybox",
-				TotalImages:   11,
+				TotalImages:    11,
 				Concurrency:    3,
 			}
 			job.Run()
@@ -37,23 +38,26 @@ var _ = Describe("Job", func() {
 
 			for _, cmd := range fakeCmdRunner.ExecutedCommands() {
 				Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+				Expect(cmd.Args[1]).To(Equal("--store"))
 				Expect(cmd.Args[2]).To(Equal("/store/path"))
+				Expect(cmd.Args[3]).To(Equal("--log-level"))
 				Expect(cmd.Args[4]).To(Equal("debug"))
-				Expect(cmd.Args[5]).To(Equal("create"))
-				Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
+				Expect(cmd.Args[5]).To(Equal("--driver"))
+				Expect(cmd.Args[6]).To(Equal("btrfs"))
+				Expect(cmd.Args[7]).To(Equal("create"))
+				Expect(cmd.Args[8]).To(Equal("docker:///busybox"))
 			}
 		})
 
-		Context("when UseQuota is true", func() {
-			It("runs grootfs with --disk-limit-size-bytes flag", func() {
+		Context("when Driver is not specified", func() {
+			It("doesn't ask for a `--driver`", func() {
 				job := &bench.Job{
 					Runner:         fakeCmdRunner,
 					GrootFSBinPath: "/path/to/grootfs",
 					StorePath:      "/store/path",
 					LogLevel:       "debug",
 					BaseImage:      "docker:///busybox",
-					UseQuota:       true,
-					TotalImages:   11,
+					TotalImages:    11,
 					Concurrency:    3,
 				}
 				job.Run()
@@ -63,12 +67,46 @@ var _ = Describe("Job", func() {
 
 				for _, cmd := range fakeCmdRunner.ExecutedCommands() {
 					Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+					Expect(cmd.Args[1]).To(Equal("--store"))
 					Expect(cmd.Args[2]).To(Equal("/store/path"))
+					Expect(cmd.Args[3]).To(Equal("--log-level"))
 					Expect(cmd.Args[4]).To(Equal("debug"))
 					Expect(cmd.Args[5]).To(Equal("create"))
-					Expect(cmd.Args[6]).To(Equal("--disk-limit-size-bytes"))
-					Expect(cmd.Args[7]).To(Equal("1019430400"))
-					Expect(cmd.Args[8]).To(Equal("docker:///busybox"))
+					Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
+				}
+			})
+		})
+
+		Context("when UseQuota is true", func() {
+			It("runs grootfs with --disk-limit-size-bytes flag", func() {
+				job := &bench.Job{
+					Runner:         fakeCmdRunner,
+					GrootFSBinPath: "/path/to/grootfs",
+					StorePath:      "/store/path",
+					Driver:         "btrfs",
+					LogLevel:       "debug",
+					BaseImage:      "docker:///busybox",
+					UseQuota:       true,
+					TotalImages:    11,
+					Concurrency:    3,
+				}
+				job.Run()
+
+				executedCommands := fakeCmdRunner.ExecutedCommands()
+				Expect(len(executedCommands)).To(Equal(11))
+
+				for _, cmd := range fakeCmdRunner.ExecutedCommands() {
+					Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+					Expect(cmd.Args[1]).To(Equal("--store"))
+					Expect(cmd.Args[2]).To(Equal("/store/path"))
+					Expect(cmd.Args[3]).To(Equal("--log-level"))
+					Expect(cmd.Args[4]).To(Equal("debug"))
+					Expect(cmd.Args[5]).To(Equal("--driver"))
+					Expect(cmd.Args[6]).To(Equal("btrfs"))
+					Expect(cmd.Args[7]).To(Equal("create"))
+					Expect(cmd.Args[8]).To(Equal("--disk-limit-size-bytes"))
+					Expect(cmd.Args[9]).To(Equal("1019430400"))
+					Expect(cmd.Args[10]).To(Equal("docker:///busybox"))
 				}
 			})
 		})
@@ -83,7 +121,7 @@ var _ = Describe("Job", func() {
 
 			It("returns the errors", func() {
 				job := &bench.Job{
-					Runner:       fakeCmdRunner,
+					Runner:      fakeCmdRunner,
 					TotalImages: 10,
 				}
 				summary := job.Run()

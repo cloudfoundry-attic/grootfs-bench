@@ -20,6 +20,9 @@ type Job struct {
 	// The GrootFS store path, where blobs/images/cache are stored
 	StorePath string
 
+	// Filesystem driver to use
+	Driver string
+
 	// Does what it says on the tin
 	LogLevel string
 
@@ -110,8 +113,13 @@ func (j *Job) grootfsCmd(workerId int) *exec.Cmd {
 		j.StorePath,
 		"--log-level",
 		j.LogLevel,
-		"create",
 	}
+
+	if j.Driver != "" {
+		args = append(args, "--driver", j.Driver)
+	}
+
+	args = append(args, "create")
 
 	if j.UseQuota {
 		args = append(args, "--disk-limit-size-bytes", "1019430400")
@@ -142,15 +150,15 @@ type SumSpec struct {
 
 // Summary represents some metrics while running grootfs with given input
 type Summary struct {
-	TotalDuration        time.Duration `json:"total_duration"`
+	TotalDuration       time.Duration `json:"total_duration"`
 	ImagesPerSecond     float64       `json:"images_per_second"`
-	RanWithQuota         bool          `json:"ran_with_quota"`
+	RanWithQuota        bool          `json:"ran_with_quota"`
 	AverageTimePerImage float64       `json:"average_time_per_image"`
-	TotalErrorsAmt       int           `json:"total_errors_amt"`
-	ErrorRate            float64       `json:"error_rate"`
+	TotalErrorsAmt      int           `json:"total_errors_amt"`
+	ErrorRate           float64       `json:"error_rate"`
 	TotalImages         int           `json:"total_images"`
-	ConcurrencyFactor    int           `json:"concurrency_factor"`
-	ErrorMessages        []string      `json:"-"`
+	ConcurrencyFactor   int           `json:"concurrency_factor"`
+	ErrorMessages       []string      `json:"-"`
 }
 
 func SummarizeResults(spec SumSpec) Summary {

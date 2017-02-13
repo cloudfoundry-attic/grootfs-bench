@@ -11,12 +11,15 @@ var (
 	eventTitle   string
 	eventMessage string
 	mode         string
+
+	metricPrefix string
 )
 
 func init() {
 	flag.StringVar(&benchBinPath, "benchBinPath", "", "")
 	flag.StringVar(&eventTitle, "eventTitle", "", "")
 	flag.StringVar(&eventMessage, "eventMessage", "", "")
+	flag.StringVar(&metricPrefix, "metricPrefix", "", "")
 	flag.StringVar(&mode, "mode", "", "")
 	flag.Parse()
 }

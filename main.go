@@ -41,6 +41,10 @@ func main() {
 			Value: "/var/lib/grootfs",
 		},
 		cli.StringFlag{
+			Name:  "driver",
+			Usage: "filesystem driver",
+		},
+		cli.StringFlag{
 			Name:  "log-level",
 			Usage: "what the name says",
 			Value: "debug",
@@ -66,6 +70,7 @@ func main() {
 
 	bench.Action = func(ctx *cli.Context) error {
 		storePath := ctx.String("store")
+		fsDriver := ctx.String("driver")
 		logLevel := ctx.String("log-level")
 		baseImage := ctx.String("base-image")
 		grootfs := ctx.String("gbin")
@@ -96,6 +101,7 @@ func main() {
 			Runner:         cmdRunner,
 			GrootFSBinPath: grootfs,
 			StorePath:      storePath,
+			Driver:         fsDriver,
 			LogLevel:       logLevel,
 			UseQuota:       ctx.Bool("with-quota"),
 			BaseImage:      baseImage,

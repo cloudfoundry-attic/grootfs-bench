@@ -35,7 +35,7 @@ func benchmarkCommand() error {
 		return err
 	}
 
-	series := createMetricSeries(result)
+	series := createMetricSeries(metricPrefix, result)
 	emitMetric(map[string]interface{}{
 		"series": series,
 	})
@@ -43,7 +43,7 @@ func benchmarkCommand() error {
 	return nil
 }
 
-func createMetricSeries(result map[string]interface{}) []map[string]interface{} {
+func createMetricSeries(prefix string, result map[string]interface{}) []map[string]interface{} {
 	series := make([]map[string]interface{}, len(result))
 
 	for key, value := range result {
@@ -56,7 +56,7 @@ func createMetricSeries(result map[string]interface{}) []map[string]interface{} 
 		}
 
 		series = append(series, map[string]interface{}{
-			"metric": fmt.Sprintf("grootfs.benchmark-performance.%s", key),
+			"metric": fmt.Sprintf("%s.grootfs.benchmark-performance.%s", prefix, key),
 			"points": [][]float64{
 				{now, metric},
 			},
