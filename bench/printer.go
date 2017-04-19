@@ -27,6 +27,9 @@ func (p *TextPrinter) Print(summary Summary) error {
 Total images requested: {{.TotalImages}}
 Concurrency factor....: {{.ConcurrencyFactor}}
 Using quota?..........: {{.RanWithQuota}}
+Parallel clean?.......: {{.RanWithParallelClean}}
+Number of cleans......: {{.NumberOfCleans}}
+Number of deletes.....: {{.NumberOfDeletes}}
 .......................
 Total duration........: {{.TotalDuration}}
 Images per second.....: {{printf "%.3f" .ImagesPerSecond}}

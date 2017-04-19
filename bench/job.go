@@ -11,126 +11,48 @@ import (
 	"code.cloudfoundry.org/commandrunner"
 )
 
-type Job struct {
-	Runner commandrunner.CommandRunner
-
-	// Path to grootfs binary
-	GrootFSBinPath string
-
-	// The GrootFS store path, where blobs/images/cache are stored
-	StorePath string
-
-	// Filesystem driver to use
-	Driver string
-
-	// Does what it says on the tin
-	LogLevel string
-
-	// The Base Image to be downloaded
-	BaseImage string
-
-	// Run benchmark using quotas
-	UseQuota bool
-
-	// The number of concurrent workers to run
-	Concurrency int
-
-	// The total number of images to be created
-	TotalImages int
-
-	// Hold the results for each iteration
-	results chan *Result
+type JobExecutor struct {
+	Jobs []*Job
 }
 
-// Run is a blocking operation. It blocks until all concurrent cmd execution is
-// completed.
-func (j *Job) Run() Summary {
-	if j.Concurrency == 0 {
-		j.Concurrency = runtime.NumCPU()
+func (e *JobExecutor) Run() Summary {
+	if len(e.Jobs) == 0 {
+		return Summary{}
 	}
 
-	j.results = make(chan *Result, j.TotalImages)
-
-	start := time.Now()
-	j.runWorkers()
-	totalDuration := time.Since(start)
-
-	close(j.results)
-	return SummarizeResults(
-		SumSpec{
-			Duration:    totalDuration,
-			Concurrency: j.Concurrency,
-			UseQuota:    j.UseQuota,
-			ResChan:     j.results,
-		})
-}
-
-func (j *Job) runWorkers() {
 	var wg sync.WaitGroup
-	wg.Add(j.TotalImages)
+	wg.Add(len(e.Jobs))
 
-	for i := 0; i < j.Concurrency; i++ {
-		go func(conc int) {
-			for i := 0; i < j.TotalImages/j.Concurrency; i++ {
-				defer wg.Done()
-				j.run(conc)
-			}
-		}(i)
-	}
+	summaryChannel := make(chan Summary, len(e.Jobs))
+	doneChannel := make(chan bool)
+	createdImagesChannel := make(chan string, e.Jobs[0].TotalImages)
 
-	// Handle some leftovers (i.e: 11 % 3)
-	for i := 0; i < j.TotalImages%j.Concurrency; i++ {
-		go func(i int) {
+	for _, job := range e.Jobs {
+		job.Done = doneChannel
+		job.Mutex = &sync.Mutex{}
+		job.CreatedImages = createdImagesChannel
+		go func(job *Job) {
 			defer wg.Done()
-			j.run(i)
-		}(i)
+			summary := job.Run()
+			if job.Command == "create" {
+				summaryChannel <- *summary
+			}
+		}(job)
 	}
 
 	wg.Wait()
-}
+	finalSummary := <-summaryChannel
 
-func (j *Job) run(i int) {
-	start := time.Now()
-	cmd := j.grootfsCmd(i)
+	for _, job := range e.Jobs {
+		if job.Command == "clean" {
+			finalSummary.NumberOfCleans = job.RunCounter
+		}
 
-	buffer := bytes.NewBuffer([]byte{})
-	cmd.Stdout = buffer
-	cmd.Stderr = buffer
-
-	var cmdErr error
-	if err := j.Runner.Run(cmd); err != nil {
-		cmdErr = fmt.Errorf("%s, %s", err, buffer.String())
+		if job.Command == "delete" {
+			finalSummary.NumberOfDeletes = job.RunCounter
+		}
 	}
-	j.results <- &Result{
-		Err:      cmdErr,
-		Duration: time.Since(start),
-	}
-}
-
-func (j *Job) grootfsCmd(workerId int) *exec.Cmd {
-	args := []string{
-		"--store",
-		j.StorePath,
-		"--log-level",
-		j.LogLevel,
-	}
-
-	if j.Driver != "" {
-		args = append(args, "--driver", j.Driver)
-	}
-
-	args = append(args, "create")
-
-	if j.UseQuota {
-		args = append(args, "--disk-limit-size-bytes", "1019430400")
-	}
-
-	args = append(args,
-		j.BaseImage,
-		fmt.Sprintf("base-image-%d-%d", workerId, time.Now().UnixNano()),
-	)
-
-	return exec.Command(j.GrootFSBinPath, args...)
+	return finalSummary
 }
 
 type Result struct {
@@ -141,37 +63,77 @@ type Result struct {
 	Duration time.Duration
 }
 
-type SumSpec struct {
-	Duration    time.Duration
-	Concurrency int
-	UseQuota    bool
-	ResChan     chan *Result
-}
-
 // Summary represents some metrics while running grootfs with given input
 type Summary struct {
-	TotalDuration       time.Duration `json:"total_duration"`
-	ImagesPerSecond     float64       `json:"images_per_second"`
-	RanWithQuota        bool          `json:"ran_with_quota"`
-	AverageTimePerImage float64       `json:"average_time_per_image"`
-	TotalErrorsAmt      int           `json:"total_errors_amt"`
-	ErrorRate           float64       `json:"error_rate"`
-	TotalImages         int           `json:"total_images"`
-	ConcurrencyFactor   int           `json:"concurrency_factor"`
-	ErrorMessages       []string      `json:"-"`
+	TotalDuration        time.Duration `json:"total_duration"`
+	ImagesPerSecond      float64       `json:"images_per_second"`
+	RanWithQuota         bool          `json:"ran_with_quota"`
+	RanWithParallelClean bool          `json:"ran_with_parallel_clean"`
+	NumberOfCleans       int           `json:"number_of_cleans"`
+	NumberOfDeletes      int           `json:"number_of_deletes"`
+	AverageTimePerImage  float64       `json:"average_time_per_image"`
+	TotalErrorsAmt       int           `json:"total_errors_amt"`
+	ErrorRate            float64       `json:"error_rate"`
+	TotalImages          int           `json:"total_images"`
+	ConcurrencyFactor    int           `json:"concurrency_factor"`
+	ErrorMessages        []string      `json:"-"`
 }
 
-func SummarizeResults(spec SumSpec) Summary {
+type Job struct {
+	Runner         commandrunner.CommandRunner
+	GrootFSBinPath string
+	StorePath      string
+	Driver         string
+	LogLevel       string
+	Command        string
+	BaseImages     []string
+	Interval       int
+	UseQuota       bool
+	Concurrency    int
+	TotalImages    int
+	CreatedImages  chan string
+	Done           chan bool
+	Results        chan *Result
+	StartTime      time.Time
+	Duration       time.Duration
+
+	RunCounter int
+	Mutex      *sync.Mutex
+}
+
+func (j *Job) Run() *Summary {
+	if j.Concurrency == 0 {
+		j.Concurrency = runtime.NumCPU()
+	}
+
+	j.StartTime = time.Now()
+	if j.Command == "create" {
+		j.runWorkers()
+		close(j.Done)
+	} else {
+		j.runLoop(j.Done)
+	}
+	j.Duration = time.Since(j.StartTime)
+
+	return j.summarizeResults()
+}
+
+func (j *Job) summarizeResults() *Summary {
+	if j.Command != "create" {
+		return nil
+	}
+
 	summary := Summary{
-		ConcurrencyFactor: spec.Concurrency,
-		TotalDuration:     spec.Duration,
-		RanWithQuota:      spec.UseQuota,
+		ConcurrencyFactor: j.Concurrency,
+		TotalDuration:     j.Duration,
+		RanWithQuota:      j.UseQuota,
 	}
 
 	errors := []string{}
 
 	averageTimePerImage := 0.0
-	for res := range spec.ResChan {
+
+	for res := range j.Results {
 		summary.TotalImages++
 
 		if res.Err != nil {
@@ -183,14 +145,123 @@ func SummarizeResults(spec SumSpec) Summary {
 	}
 
 	createdImages := float64(summary.TotalImages - summary.TotalErrorsAmt)
-	summary.ImagesPerSecond = createdImages / spec.Duration.Seconds()
+	summary.ImagesPerSecond = createdImages / j.Duration.Seconds()
 	summary.ErrorRate = float64(summary.TotalErrorsAmt*100) / float64(summary.TotalImages)
 	if createdImages == float64(0) {
 		summary.AverageTimePerImage = float64(-1)
 	} else {
 		summary.AverageTimePerImage = averageTimePerImage / createdImages
 	}
-	summary.TotalDuration = spec.Duration
+	summary.TotalDuration = j.Duration
 	summary.ErrorMessages = errors
-	return summary
+	return &summary
+}
+
+func (j *Job) runLoop(done chan bool) {
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				cmd := j.grootfsCmd("")
+				if cmd != nil {
+					j.runCommand(cmd)
+					j.Mutex.Lock()
+					j.RunCounter++
+					j.Mutex.Unlock()
+				}
+				time.Sleep(time.Second * time.Duration(j.Interval))
+			}
+		}
+	}()
+}
+
+func (j *Job) runWorkers() {
+	var wg sync.WaitGroup
+	wg.Add(j.Concurrency)
+
+	cmds := make(chan *exec.Cmd, j.TotalImages)
+	n := 0
+	for i := 0; i < j.TotalImages; i++ {
+		n = i % len(j.BaseImages)
+		cmd := j.grootfsCmd(j.BaseImages[n])
+		if cmd != nil {
+			cmds <- cmd
+		}
+	}
+	close(cmds)
+
+	j.Results = make(chan *Result, j.TotalImages)
+
+	for i := 0; i < j.Concurrency; i++ {
+		go func(number int) {
+			defer wg.Done()
+			for cmd := range cmds {
+				j.runCommand(cmd)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	close(j.Results)
+}
+
+func (j *Job) runCommand(cmd *exec.Cmd) {
+	start := time.Now()
+
+	buffer := bytes.NewBuffer([]byte{})
+	cmd.Stdout = buffer
+	cmd.Stderr = buffer
+
+	var cmdErr error
+	if err := j.Runner.Run(cmd); err != nil {
+		cmdErr = fmt.Errorf("%s, %s", err, buffer.String())
+	}
+
+	if j.Command == "create" {
+		imageName := cmd.Args[len(cmd.Args)-1]
+		j.CreatedImages <- imageName
+
+		j.Results <- &Result{
+			Err:      cmdErr,
+			Duration: time.Since(start),
+		}
+	}
+}
+
+func (j *Job) grootfsCmd(baseImage string) *exec.Cmd {
+	args := []string{
+		"--store",
+		j.StorePath,
+		"--log-level",
+		j.LogLevel,
+	}
+
+	if j.Driver != "" {
+		args = append(args, "--driver", j.Driver)
+	}
+
+	args = append(args, j.Command)
+
+	if j.Command == "create" {
+		if j.UseQuota {
+			args = append(args, "--disk-limit-size-bytes", "1019430400")
+		}
+		imageName := fmt.Sprintf("base-image-%d", time.Now().UnixNano())
+		args = append(args,
+			baseImage,
+			imageName,
+		)
+
+	} else if j.Command == "delete" {
+		imageName := <-j.CreatedImages
+		if imageName == "" {
+			return nil
+		}
+		args = append(args, imageName)
+	}
+
+	return exec.Command(j.GrootFSBinPath, args...)
 }

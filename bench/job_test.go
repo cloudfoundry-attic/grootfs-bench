@@ -2,8 +2,10 @@ package bench_test
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"runtime"
+	"sync"
 	"time"
 
 	"code.cloudfoundry.org/commandrunner/fake_command_runner"
@@ -13,30 +15,20 @@ import (
 )
 
 var _ = Describe("Job", func() {
-	var fakeCmdRunner *fake_command_runner.FakeCommandRunner
-
-	BeforeEach(func() {
-		fakeCmdRunner = fake_command_runner.New()
-	})
-
 	Describe("Run", func() {
 		It("creates the number of images provided", func() {
-			job := &bench.Job{
-				Runner:         fakeCmdRunner,
-				GrootFSBinPath: "/path/to/grootfs",
-				StorePath:      "/store/path",
-				Driver:         "btrfs",
-				LogLevel:       "debug",
-				BaseImage:      "docker:///busybox",
-				TotalImages:    11,
-				Concurrency:    3,
-			}
+			job := createJob()
+			job.TotalImages = 11
+			job.Concurrency = 3
+
+			fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
+
 			job.Run()
 
 			executedCommands := fakeCmdRunner.ExecutedCommands()
 			Expect(len(executedCommands)).To(Equal(11))
 
-			for _, cmd := range fakeCmdRunner.ExecutedCommands() {
+			for _, cmd := range executedCommands {
 				Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
 				Expect(cmd.Args[1]).To(Equal("--store"))
 				Expect(cmd.Args[2]).To(Equal("/store/path"))
@@ -49,47 +41,15 @@ var _ = Describe("Job", func() {
 			}
 		})
 
-		Context("when Driver is not specified", func() {
-			It("doesn't ask for a `--driver`", func() {
-				job := &bench.Job{
-					Runner:         fakeCmdRunner,
-					GrootFSBinPath: "/path/to/grootfs",
-					StorePath:      "/store/path",
-					LogLevel:       "debug",
-					BaseImage:      "docker:///busybox",
-					TotalImages:    11,
-					Concurrency:    3,
-				}
-				job.Run()
-
-				executedCommands := fakeCmdRunner.ExecutedCommands()
-				Expect(len(executedCommands)).To(Equal(11))
-
-				for _, cmd := range fakeCmdRunner.ExecutedCommands() {
-					Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
-					Expect(cmd.Args[1]).To(Equal("--store"))
-					Expect(cmd.Args[2]).To(Equal("/store/path"))
-					Expect(cmd.Args[3]).To(Equal("--log-level"))
-					Expect(cmd.Args[4]).To(Equal("debug"))
-					Expect(cmd.Args[5]).To(Equal("create"))
-					Expect(cmd.Args[6]).To(Equal("docker:///busybox"))
-				}
-			})
-		})
-
 		Context("when UseQuota is true", func() {
 			It("runs grootfs with --disk-limit-size-bytes flag", func() {
-				job := &bench.Job{
-					Runner:         fakeCmdRunner,
-					GrootFSBinPath: "/path/to/grootfs",
-					StorePath:      "/store/path",
-					Driver:         "btrfs",
-					LogLevel:       "debug",
-					BaseImage:      "docker:///busybox",
-					UseQuota:       true,
-					TotalImages:    11,
-					Concurrency:    3,
-				}
+				job := createJob()
+				job.TotalImages = 11
+				job.Concurrency = 3
+				job.UseQuota = true
+
+				fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
+
 				job.Run()
 
 				executedCommands := fakeCmdRunner.ExecutedCommands()
@@ -112,7 +72,13 @@ var _ = Describe("Job", func() {
 		})
 
 		Context("when something fails", func() {
+			var job *bench.Job
+
 			BeforeEach(func() {
+				job = createJob()
+				job.TotalImages = 10
+
+				fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
 				fakeCmdRunner.WhenRunning(fake_command_runner.CommandSpec{}, func(cmd *exec.Cmd) error {
 					cmd.Stderr.Write([]byte("groot failed to make a image"))
 					return errors.New("exit status 1")
@@ -120,10 +86,6 @@ var _ = Describe("Job", func() {
 			})
 
 			It("returns the errors", func() {
-				job := &bench.Job{
-					Runner:      fakeCmdRunner,
-					TotalImages: 10,
-				}
 				summary := job.Run()
 
 				Expect(summary.ErrorMessages).To(HaveLen(10))
@@ -135,9 +97,9 @@ var _ = Describe("Job", func() {
 
 		Context("when not providing concurrency level", func() {
 			It("sets the default to the # of cpus", func() {
-				job := &bench.Job{
-					Runner: fakeCmdRunner,
-				}
+				job := createJob()
+				job.Concurrency = 0
+
 				summary := job.Run()
 
 				Expect(summary.ConcurrencyFactor).To(Equal(runtime.NumCPU()))
@@ -145,114 +107,181 @@ var _ = Describe("Job", func() {
 		})
 	})
 
-	Describe("SummarizeResults", func() {
+	Describe("clean", func() {
+		It("runs the clean command", func() {
+			job := cleanJob()
+			fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
+
+			jobAssassin(job)
+			job.Run()
+
+			Eventually(fakeCmdRunner.ExecutedCommands, 5*time.Second).ShouldNot(BeEmpty())
+
+			for _, cmd := range fakeCmdRunner.ExecutedCommands() {
+				Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+				Expect(cmd.Args[1]).To(Equal("--store"))
+				Expect(cmd.Args[2]).To(Equal("/store/path"))
+				Expect(cmd.Args[3]).To(Equal("--log-level"))
+				Expect(cmd.Args[4]).To(Equal("debug"))
+				Expect(cmd.Args[5]).To(Equal("--driver"))
+				Expect(cmd.Args[6]).To(Equal("btrfs"))
+				Expect(cmd.Args[7]).To(Equal("clean"))
+			}
+		})
+	})
+
+	Describe("Delete", func() {
 		var (
-			results       chan *bench.Result
-			totalDuration time.Duration
-			spec          bench.SumSpec
+			job           *bench.Job
+			fakeCmdRunner *fake_command_runner.FakeCommandRunner
 		)
 
-		BeforeEach(func() {
-			results = make(chan *bench.Result, 100)
-			totalDuration = time.Second * 20
-		})
-
 		JustBeforeEach(func() {
-			r := &bench.Result{
-				Err:      nil,
-				Duration: 10 * time.Second,
-			}
-			results <- r
-			results <- r
+			job = deleteJob()
+			job.CreatedImages <- "image-0"
+			job.CreatedImages <- "image-1"
+			job.CreatedImages <- "image-2"
+			job.CreatedImages <- "image-3"
+			close(job.CreatedImages)
+
+			fakeCmdRunner = job.Runner.(*fake_command_runner.FakeCommandRunner)
 		})
 
-		It("returns the results summarized", func() {
-			close(results)
+		It("deletes the expected images", func() {
+			jobAssassin(job)
+			job.Run()
 
-			spec = bench.SumSpec{
-				Duration:    totalDuration,
-				Concurrency: 2,
-				UseQuota:    false,
-				ResChan:     results,
+			Eventually(fakeCmdRunner.ExecutedCommands, 5*time.Second).Should(HaveLen(4))
+
+			for i, cmd := range fakeCmdRunner.ExecutedCommands() {
+				Expect(cmd.Args[0]).To(Equal("/path/to/grootfs"))
+				Expect(cmd.Args[1]).To(Equal("--store"))
+				Expect(cmd.Args[2]).To(Equal("/store/path"))
+				Expect(cmd.Args[3]).To(Equal("--log-level"))
+				Expect(cmd.Args[4]).To(Equal("debug"))
+				Expect(cmd.Args[5]).To(Equal("--driver"))
+				Expect(cmd.Args[6]).To(Equal("btrfs"))
+				Expect(cmd.Args[7]).To(Equal("delete"))
+				Expect(cmd.Args[8]).To(Equal(fmt.Sprintf("image-%d", i)))
 			}
-			summary := bench.SummarizeResults(spec)
+		})
+
+		Describe("when the interval is specified", func() {
+			It("deletes every n seconds", func() {
+				job.Interval = 2
+
+				Expect(fakeCmdRunner.ExecutedCommands()).Should(HaveLen(0))
+				jobAssassin(job)
+				job.Run()
+				Eventually(fakeCmdRunner.ExecutedCommands, 5*time.Second).Should(HaveLen(3))
+			})
+		})
+	})
+
+	Describe("Job summaries", func() {
+		It("returns the results summarized", func() {
+			job := createJob()
+			job.Concurrency = 2
+			job.TotalImages = 2
+			summary := job.Run()
 
 			Expect(summary.TotalImages).To(Equal(2))
-			Expect(summary.ImagesPerSecond).To(BeNumerically("~", 0.099, 0.1))
 			Expect(summary.TotalDuration).To(BeNumerically("~", time.Second*20, time.Second*21))
-			Expect(summary.AverageTimePerImage).To(Equal(float64(10)))
 			Expect(summary.ConcurrencyFactor).To(Equal(2))
 		})
 
 		Context("when there are 0 images created", func() {
+			var job *bench.Job
+
+			BeforeEach(func() {
+				job = createJob()
+				job.TotalImages = 10
+
+				fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
+				fakeCmdRunner.WhenRunning(fake_command_runner.CommandSpec{}, func(cmd *exec.Cmd) error {
+					cmd.Stderr.Write([]byte("groot failed to make a image"))
+					return errors.New("exit status 1")
+				})
+			})
+
 			It("sets the average time per image to -1", func() {
-				results = make(chan *bench.Result, 1)
-				results <- &bench.Result{
-					Err:      errors.New("failed"),
-					Duration: 10 * time.Second,
-				}
-				close(results)
-				spec = bench.SumSpec{
-					Duration:    totalDuration,
-					Concurrency: 2,
-					UseQuota:    false,
-					ResChan:     results,
-				}
-				summary := bench.SummarizeResults(spec)
+				summary := job.Run()
 
 				Expect(summary.AverageTimePerImage).To(Equal(float64(-1)))
 			})
 		})
 
 		Context("when command fails", func() {
-			BeforeEach(func() {
-				spec = bench.SumSpec{
-					Duration:    totalDuration,
-					Concurrency: 2,
-					UseQuota:    false,
-					ResChan:     results,
-				}
-			})
+			var job *bench.Job
 
-			JustBeforeEach(func() {
-				results <- &bench.Result{
-					Err:      errors.New("failed to execute grootfs"),
-					Duration: 20 * time.Second,
-				}
+			BeforeEach(func() {
+				job = createJob()
+				job.TotalImages = 10
+
+				fakeCmdRunner := job.Runner.(*fake_command_runner.FakeCommandRunner)
+				fakeCmdRunner.WhenRunning(fake_command_runner.CommandSpec{}, func(cmd *exec.Cmd) error {
+					cmd.Stderr.Write([]byte("groot failed to make a image"))
+					return errors.New("exit status 1")
+				})
 			})
 
 			It("returns the total errors", func() {
-				close(results)
-				summary := bench.SummarizeResults(spec)
-				Expect(summary.TotalErrorsAmt).To(Equal(1))
+				summary := job.Run()
+				Expect(summary.TotalErrorsAmt).To(Equal(10))
 			})
 
 			It("returns the error rate", func() {
-				close(results)
-				summary := bench.SummarizeResults(spec)
+				summary := job.Run()
 				// 33.33 because we're creating 2 in the outer BeforeEach
 				Expect(summary.ErrorRate).To(BeNumerically(">", 33.33))
 			})
 
-			It("ignores the the failures for AverageTimePerImage metrics", func() {
-				close(results)
-				summary := bench.SummarizeResults(spec)
-				// 10 because of the outer BeforeEach
-				Expect(summary.AverageTimePerImage).To(Equal(float64(10)))
-			})
-
 			It("sets RanWithQuota to true if quota was applied", func() {
-				close(results)
-				spec = bench.SumSpec{
-					Duration:    totalDuration,
-					Concurrency: 2,
-					UseQuota:    true,
-					ResChan:     results,
-				}
-				summary := bench.SummarizeResults(spec)
-				// 10 because of the outer BeforeEach
+				job.UseQuota = true
+				summary := job.Run()
 				Expect(summary.RanWithQuota).To(BeTrue())
 			})
 		})
 	})
 })
+
+func createJob() *bench.Job {
+	job := genericJob()
+	job.Command = "create"
+	return job
+}
+
+func deleteJob() *bench.Job {
+	job := genericJob()
+	job.Command = "delete"
+	return job
+}
+
+func cleanJob() *bench.Job {
+	job := genericJob()
+	job.Command = "clean"
+	return job
+}
+
+func genericJob() *bench.Job {
+	return &bench.Job{
+		Runner:         fake_command_runner.New(),
+		GrootFSBinPath: "/path/to/grootfs",
+		StorePath:      "/store/path",
+		Driver:         "btrfs",
+		LogLevel:       "debug",
+		BaseImages:     []string{"docker:///busybox"},
+		Interval:       1,
+		Concurrency:    1,
+		CreatedImages:  make(chan string, 100),
+		Done:           make(chan bool),
+		Mutex:          new(sync.Mutex),
+	}
+}
+
+func jobAssassin(job *bench.Job) {
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(job.Done)
+	}()
+}

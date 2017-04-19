@@ -16,7 +16,7 @@ func main() {
 	bench := cli.NewApp()
 	bench.Name = "grootfs-bench"
 	bench.Usage = "grootfs awesome benchmarking tool"
-	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <btrfs-store> --log-level <debug|info|warn> --images <n> --concurrency <c> --base-image <docker:///img>"
+	bench.UsageText = "grootfs-bench --gbin <grootfs-bin> --store <store-path> --log-level <debug|info|warn> --images <n> --concurrency <c> --base-image <docker:///img>"
 	bench.Version = "0.1.0"
 
 	bench.Flags = []cli.Flag{
@@ -49,10 +49,9 @@ func main() {
 			Usage: "what the name says",
 			Value: "debug",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "base-image",
 			Usage: "base image to use",
-			Value: "docker:///busybox:latest",
 		},
 		cli.BoolFlag{
 			Name:  "with-quota",
@@ -66,25 +65,43 @@ func main() {
 			Name:  "json",
 			Usage: "return the result in json format",
 		},
+		cli.BoolFlag{
+			Name:  "parallel-clean",
+			Usage: "run a concurrent clean operation",
+		},
+		cli.IntFlag{
+			Name:  "parallel-clean-interval",
+			Usage: "interval at which to call clean during concurrent operations in seconds. parallel-clean must also be set",
+			Value: 6,
+		},
+		cli.IntFlag{
+			Name:  "parallel-delete-interval",
+			Usage: "interval at which to call delete during concurrent operations in seconds. parallel-clean must also be set",
+			Value: 3,
+		},
 	}
 
 	bench.Action = func(ctx *cli.Context) error {
 		storePath := ctx.String("store")
 		fsDriver := ctx.String("driver")
 		logLevel := ctx.String("log-level")
-		baseImage := ctx.String("base-image")
+		baseImages := ctx.StringSlice("base-image")
 		grootfs := ctx.String("gbin")
 		totalImagesAmt := ctx.Int("images")
 		concurrency := ctx.Int("concurrency")
-		nospin := ctx.Bool("nospin")
+		withQuota := ctx.Bool("with-quota")
+		withParallelClean := ctx.Bool("parallel-clean")
+		parallelCleanInterval := ctx.Int("parallel-clean-interval")
+		parallelDeleteInterval := ctx.Int("parallel-delete-interval")
 		jsonify := ctx.Bool("json")
-		hasSpinner := !nospin
+		hasSpinner := !ctx.Bool("nospin")
 
 		var spinner *spinnerpkg.Spinner
 		if hasSpinner {
+			now := time.Now().Format("15:04:05")
 			style := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % 36
 			spinner = spinnerpkg.New(spinnerpkg.CharSets[style], 100*time.Millisecond)
-			spinner.Prefix = "Doing crazy maths "
+			spinner.Prefix = fmt.Sprintf("Doing crazy maths since %v (images: %d, conc: %d, parallel commands? %v) ", now, totalImagesAmt, concurrency, withParallelClean)
 			must(spinner.Color("green"))
 			spinner.Start()
 			defer spinner.Stop()
@@ -97,24 +114,53 @@ func main() {
 		}
 
 		cmdRunner := linux_command_runner.New()
-		summary := (&benchpkg.Job{
-			Runner:         cmdRunner,
-			GrootFSBinPath: grootfs,
-			StorePath:      storePath,
-			Driver:         fsDriver,
-			LogLevel:       logLevel,
-			UseQuota:       ctx.Bool("with-quota"),
-			BaseImage:      baseImage,
-			Concurrency:    concurrency,
-			TotalImages:    totalImagesAmt,
-		}).Run()
+		executor := &benchpkg.JobExecutor{
+			Jobs: []*benchpkg.Job{
+				&benchpkg.Job{
+					Command:        "create",
+					Runner:         cmdRunner,
+					GrootFSBinPath: grootfs,
+					StorePath:      storePath,
+					Driver:         fsDriver,
+					LogLevel:       logLevel,
+					UseQuota:       withQuota,
+					BaseImages:     baseImages,
+					Concurrency:    concurrency,
+					TotalImages:    totalImagesAmt,
+				},
+			},
+		}
+		if withParallelClean {
+			executor.Jobs = append(executor.Jobs,
+				&benchpkg.Job{
+					Command:        "clean",
+					Runner:         cmdRunner,
+					GrootFSBinPath: grootfs,
+					StorePath:      storePath,
+					Driver:         fsDriver,
+					LogLevel:       logLevel,
+					Interval:       parallelCleanInterval,
+				})
+			executor.Jobs = append(executor.Jobs,
+				&benchpkg.Job{
+					Command:        "delete",
+					Runner:         cmdRunner,
+					GrootFSBinPath: grootfs,
+					StorePath:      storePath,
+					Driver:         fsDriver,
+					LogLevel:       logLevel,
+					Interval:       parallelDeleteInterval,
+				})
+		}
 
+		summary := executor.Run()
+		summary.RanWithParallelClean = withParallelClean
 		if err := printer.Print(summary); err != nil {
 			return err
 		}
 
 		if summary.TotalErrorsAmt > 0 {
-			return fmt.Errorf("%s failed %d times", grootfs, summary.TotalErrorsAmt)
+			return fmt.Errorf("%s failed %d times\n", grootfs, summary.TotalErrorsAmt)
 		}
 
 		return nil

@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Bench", func() {
 	It("returns the output in plain text by default", func() {
-		cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--images", "10")
+		cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--images", "10", "--base-image", "docker:///busybox")
 		buffer := gbytes.NewBuffer()
 		cmd.Stdout = buffer
 		err := cmd.Run()
@@ -25,7 +25,7 @@ var _ = Describe("Bench", func() {
 
 	Context("when --json is provided", func() {
 		It("returns a json formatted summary", func() {
-			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--images", "10", "--json")
+			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--images", "10", "--json", "--base-image", "docker:///busybox")
 			out, err := cmd.Output()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -43,6 +43,18 @@ var _ = Describe("Bench", func() {
 			Eventually(sess.Wait()).ShouldNot(gexec.Exit(0))
 
 			Eventually(sess.Err).Should(gbytes.Say("could not create image 1: exit status 1, fake grootfs failed"))
+		})
+	})
+
+	Context("when ParallelClean is True", func() {
+		It("runs delete and clean in parallel to create", func() {
+			cmd := exec.Command(GrootFSBenchBin, "--gbin", FakeGrootFS, "--nospin", "--images", "10", "--base-image", "docker:///busybox", "--parallel-clean")
+			buffer := gbytes.NewBuffer()
+			cmd.Stdout = buffer
+			err := cmd.Run()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buffer).Should(gbytes.Say(`Parallel clean\?\.*: true`))
 		})
 	})
 })
