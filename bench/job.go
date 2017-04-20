@@ -44,6 +44,7 @@ func (e *JobExecutor) Run() Summary {
 	finalSummary := <-summaryChannel
 
 	for _, job := range e.Jobs {
+		job.Mutex.Lock()
 		if job.Command == "clean" {
 			finalSummary.NumberOfCleans = job.RunCounter
 		}
@@ -51,6 +52,7 @@ func (e *JobExecutor) Run() Summary {
 		if job.Command == "delete" {
 			finalSummary.NumberOfDeletes = job.RunCounter
 		}
+		job.Mutex.Unlock()
 	}
 	return finalSummary
 }
