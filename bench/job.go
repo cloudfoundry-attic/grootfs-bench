@@ -86,6 +86,7 @@ type Job struct {
 	GrootFSBinPath string
 	StorePath      string
 	Driver         string
+	MetricsEnabled bool
 	LogLevel       string
 	Command        string
 	BaseImages     []string
@@ -239,6 +240,10 @@ func (j *Job) grootfsCmd(baseImage string) *exec.Cmd {
 		j.StorePath,
 		"--log-level",
 		j.LogLevel,
+	}
+
+	if j.MetricsEnabled {
+		args = append(args, "--metron-endpoint", "127.0.0.1:3457")
 	}
 
 	if j.Driver != "" {

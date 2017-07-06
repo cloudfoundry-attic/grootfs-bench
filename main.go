@@ -44,6 +44,10 @@ func main() {
 			Name:  "driver",
 			Usage: "filesystem driver",
 		},
+		cli.BoolFlag{
+			Name:  "enable-groot-metrics",
+			Usage: "emit grootfs metrics to metron",
+		},
 		cli.StringFlag{
 			Name:  "log-level",
 			Usage: "what the name says",
@@ -84,6 +88,7 @@ func main() {
 	bench.Action = func(ctx *cli.Context) error {
 		storePath := ctx.String("store")
 		fsDriver := ctx.String("driver")
+		grootfsMetrics := ctx.Bool("enable-groot-metrics")
 		logLevel := ctx.String("log-level")
 		baseImages := ctx.StringSlice("base-image")
 		grootfs := ctx.String("gbin")
@@ -122,6 +127,7 @@ func main() {
 					GrootFSBinPath: grootfs,
 					StorePath:      storePath,
 					Driver:         fsDriver,
+					MetricsEnabled: grootfsMetrics,
 					LogLevel:       logLevel,
 					UseQuota:       withQuota,
 					BaseImages:     baseImages,
@@ -138,6 +144,7 @@ func main() {
 					GrootFSBinPath: grootfs,
 					StorePath:      storePath,
 					Driver:         fsDriver,
+					MetricsEnabled: grootfsMetrics,
 					LogLevel:       logLevel,
 					Interval:       parallelCleanInterval,
 				})
@@ -148,6 +155,7 @@ func main() {
 					GrootFSBinPath: grootfs,
 					StorePath:      storePath,
 					Driver:         fsDriver,
+					MetricsEnabled: grootfsMetrics,
 					LogLevel:       logLevel,
 					Interval:       parallelDeleteInterval,
 				})
